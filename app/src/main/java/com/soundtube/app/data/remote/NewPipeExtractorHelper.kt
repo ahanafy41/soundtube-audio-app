@@ -159,20 +159,25 @@ object NewPipeExtractorHelper {
             channelExtractor.fetchPage()
 
             val results = mutableListOf<VideoFeedItem>()
-            val items = channelExtractor.initialPage?.items ?: emptyList()
-            for (item in items) {
-                if (item is StreamInfoItem) {
-                    results.add(
-                        VideoFeedItem(
-                            videoId = item.url?.substringAfterLast("v=")?.substringBefore("&") ?: item.url ?: "",
-                            title = item.name ?: "",
-                            uploaderName = item.uploaderName ?: channelExtractor.name ?: "",
-                            uploaderUrl = channelUrl,
-                            durationText = if (item.duration > 0) formatDuration(item.duration) else null,
-                            durationSeconds = item.duration,
-                            thumbnailUrl = item.thumbnails?.firstOrNull()?.url
+            val tabs = channelExtractor.tabs
+            val videoTab = tabs.firstOrNull { it.name.equals("Videos", ignoreCase = true) } ?: tabs.firstOrNull()
+            if (videoTab != null) {
+                videoTab.fetchPage()
+                val items = videoTab.initialPage?.items ?: emptyList()
+                for (item in items) {
+                    if (item is StreamInfoItem) {
+                        results.add(
+                            VideoFeedItem(
+                                videoId = item.url?.substringAfterLast("v=")?.substringBefore("&") ?: item.url ?: "",
+                                title = item.name ?: "",
+                                uploaderName = item.uploaderName ?: channelExtractor.name ?: "",
+                                uploaderUrl = channelUrl,
+                                durationText = if (item.duration > 0) formatDuration(item.duration) else null,
+                                durationSeconds = item.duration,
+                                thumbnailUrl = item.thumbnails?.firstOrNull()?.url
+                            )
                         )
-                    )
+                    }
                 }
             }
             Result.success(results)
