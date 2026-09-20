@@ -1,0 +1,76 @@
+{
+  "project_name": "SoundTube",
+  "version": "1.0.0",
+  "track": "Track A: Desktop & Offline",
+  "language": "Kotlin",
+  "frameworks": [
+    "Android Jetpack Compose",
+    "AndroidX Media3 (ExoPlayer 1.4.1)",
+    "AndroidX MediaSession",
+    "NewPipeExtractor (v0.24.4)",
+    "AndroidX Room (2.6.1)",
+    "Material 3"
+  ],
+  "scoping_mode": "Fast-Track",
+  "architecture": {
+    "pattern": "Clean Architecture / MVVM with Offline-First Repository & MediaSessionService",
+    "layers": [
+      "Domain (UseCases, Models, Contracts)",
+      "Data (NewPipeExtractor Client, Room DB, Media3 DownloadManager, Repositories)",
+      "Playback Engine (AndroidX MediaSessionService, ExoPlayer 1.4.1, AudioOnly Player Adapter)",
+      "Presentation (Jetpack Compose UI, Material 3, Accessibility Semantics, ViewModels)"
+    ],
+    "a11y_strategy": "Strict Screen Reader Optimization (TalkBack and Jieshuo/CSR): explicit contentDescription without emoji noise, liveRegion for async search/playback feedback, custom accessibility actions for list items, minimum 48dp touch targets, semantic state announcements.",
+    "persistence": "AndroidX Room (SQLite) for Subscriptions, Playback Resume State, Download Records, and SimpleCache for Audio Chunks"
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Pure Audio Only Stream Extraction & Playback",
+      "description": "Zero video rendering engine. Stream audio directly using NewPipeExtractor to retrieve audio-only formats (m4a/opus/webm) and play via Media3 ExoPlayer with lockscreen MediaSession controls and background playback support.",
+      "priority": "P0",
+      "verification_criteria": "ExoPlayer plays audio stream with screen off / in background without decoding video buffers; notification controls respond to play/pause/seek."
+    },
+    {
+      "id": "REQ-002",
+      "title": "Offline Audio Downloading & Cache Management",
+      "description": "Full offline download support prioritizing audio streams. Downloads managed via Media3 DownloadManager/Downloader with metadata tracked in Room DB. Support pausing, resuming, deleting, and offline playback without network access.",
+      "priority": "P0",
+      "verification_criteria": "Audio file downloaded completely to cache/storage, appears in offline downloads list, and plays without internet connection."
+    },
+    {
+      "id": "REQ-003",
+      "title": "Resume Playback Position Tracking",
+      "description": "Persist user playback progress in Room database periodically and on pause/stop. Upon opening an audio item, prompt or automatically resume from last saved timestamp unless completed (>95%).",
+      "priority": "P1",
+      "verification_criteria": "Stopping audio at 05:23 and reopening resumes at 05:23; completed tracks reset position."
+    },
+    {
+      "id": "REQ-004",
+      "title": "Local Channel Subscriptions & Feed Ingestion",
+      "description": "Maintain 100% on-device local channel subscriptions in Room database. Allow user to subscribe/unsubscribe without Google account login. Aggregate latest feed items from subscribed channels via NewPipeExtractor.",
+      "priority": "P1",
+      "verification_criteria": "User can subscribe to channels locally; feed tab displays chronologically sorted audio uploads from subscribed channels."
+    },
+    {
+      "id": "REQ-005",
+      "title": "Search with Instant Accessibility Readout",
+      "description": "Fast audio search with immediate accessibility announcement of results count, query state, and loading progress using aria-live / liveRegion semantics.",
+      "priority": "P1",
+      "verification_criteria": "Search queries execute swiftly; screen reader immediately announces result count and states clearly."
+    },
+    {
+      "id": "REQ-006",
+      "title": "Complete Screen Reader Accessibility Compliance",
+      "description": "Fully tailored for TalkBack and Jieshuo (CSR) screen readers: clear concise contentDescription labels without emoji noise, semantic action labels (e.g., Download, Subscribe, Resume), linear traversal order, and high contrast.",
+      "priority": "P0",
+      "verification_criteria": "App is 100% operable with screen reader gestures, zero unlabeled buttons, unambiguous announcements for all state transitions."
+    }
+  ],
+  "entry_points": {
+    "run": "./gradlew installDebug",
+    "test": "./gradlew test",
+    "doctor": "./gradlew --version",
+    "build": "./gradlew assembleRelease"
+  }
+}

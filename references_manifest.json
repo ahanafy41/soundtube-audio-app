@@ -1,0 +1,97 @@
+{
+  "project_name": "SoundTube",
+  "domain": "Android Native Audio YouTube Client",
+  "generated_at": "2026-09-20T20:16:00Z",
+  "architecture_summary": {
+    "engine": "NewPipeExtractor (org.schabi.newpipe.extractor)",
+    "engine_rationale": "Direct, zero-video YouTube extraction in native Java/Kotlin without external Python runtime or Termux dependencies. Far superior start latency and minimal footprint compared to youtubedl-android wrappers.",
+    "audio_player_engine": "AndroidX Media3 (ExoPlayer 1.4+) with MediaSessionService",
+    "offline_storage": "AndroidX Media3 DownloadManager + SimpleCache with local Room DB metadata",
+    "local_subscription_storage": "AndroidX Room (SQLite) with channel ID, name, avatar, and last sync timestamp",
+    "ui_framework": "Jetpack Compose with Material 3 & strict Screen Reader Accessibility (TalkBack/Jieshuo contentDescription + liveRegion)",
+    "standalone_guarantee": "100% On-device execution, zero intermediate backend server, zero Termux dependencies, works entirely as an independent APK."
+  },
+  "tech_stack": {
+    "language": "Kotlin 2.0+ (JVM target 17 / 21)",
+    "min_sdk": 26,
+    "target_sdk": 35,
+    "gradle_dependencies": [
+      {
+        "group": "com.github.TeamNewPipe",
+        "artifact": "NewPipeExtractor",
+        "version": "v0.24.4",
+        "purpose": "Pure YouTube stream & channel metadata extraction"
+      },
+      {
+        "group": "androidx.media3",
+        "artifact": "media3-exoplayer",
+        "version": "1.4.1",
+        "purpose": "Audio stream playback and background caching"
+      },
+      {
+        "group": "androidx.media3",
+        "artifact": "media3-session",
+        "version": "1.4.1",
+        "purpose": "System notification playback controls & lockscreen integration"
+      },
+      {
+        "group": "androidx.media3",
+        "artifact": "media3-datasource",
+        "version": "1.4.1",
+        "purpose": "HTTP/Local cache datasource abstraction"
+      },
+      {
+        "group": "androidx.room",
+        "artifact": "room-runtime",
+        "version": "2.6.1",
+        "purpose": "Local database for bookmarks, playback resumption, subscriptions"
+      },
+      {
+        "group": "androidx.room",
+        "artifact": "room-ktx",
+        "version": "2.6.1",
+        "purpose": "Coroutines support for Room"
+      },
+      {
+        "group": "com.google.android.material",
+        "artifact": "material",
+        "version": "1.12.0",
+        "purpose": "Accessibility-compliant UI components"
+      }
+    ],
+    "build_requirements": {
+      "desugaring": "coreLibraryDesugaring('com.android.tools:desugar_jdk_libs_nio:2.1.2')",
+      "proguard_rules": [
+        "-keep class org.mozilla.javascript.** { *; }",
+        "-keep class org.mozilla.classfile.ClassFileWriter",
+        "-dontwarn org.mozilla.javascript.tools.**"
+      ]
+    }
+  },
+  "core_function_signatures": {
+    "stream_extractor": [
+      "suspend fun getAudioStreamUrl(videoId: String): Result<AudioStreamInfo>",
+      "suspend fun getChannelFeed(channelId: String): Result<List<VideoFeedItem>>",
+      "suspend fun searchAudio(query: String): Result<List<VideoFeedItem>>"
+    ],
+    "playback_resumption": [
+      "suspend fun savePlaybackPosition(videoId: String, positionMs: Long, durationMs: Long)",
+      "suspend fun getPlaybackPosition(videoId: String): Long?",
+      "suspend fun markCompleted(videoId: String)"
+    ],
+    "download_manager": [
+      "fun downloadAudio(videoId: String, title: String, streamUrl: String)",
+      "fun getDownloadStatus(videoId: String): Flow<DownloadItemState>",
+      "fun removeDownload(videoId: String)"
+    ],
+    "subscription_manager": [
+      "suspend fun subscribe(channelId: String, name: String, avatarUrl: String)",
+      "suspend fun unsubscribe(channelId: String)",
+      "fun getSubscribedChannels(): Flow<List<ChannelEntity>>"
+    ]
+  },
+  "accessibility_invariants": {
+    "screen_reader_standards": "WCAG 2.2 Level AA / Android Accessibility guidelines",
+    "talkback_csr_optimization": "Explicit contentDescription on all icon buttons; aria/traversal index; semantic state descriptions for playing/paused and download progress without emoji noise."
+  }
+}
