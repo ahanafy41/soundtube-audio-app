@@ -47,8 +47,13 @@ object NewPipeExtractorHelper {
                     val reqBuilder = okhttp3.Request.Builder()
                         .url(url)
 
+                    var hasUserAgent = false
                     headers.forEach { (name, values) ->
+                        if (name.equals("User-Agent", ignoreCase = true)) hasUserAgent = true
                         values.forEach { v -> reqBuilder.addHeader(name, v) }
+                    }
+                    if (!hasUserAgent) {
+                        reqBuilder.addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
                     }
 
                     when (httpMethod) {

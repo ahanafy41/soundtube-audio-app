@@ -81,7 +81,7 @@ dependencies {
     implementation("androidx.media3:media3-common:1.4.1")
 
     // NewPipeExtractor
-    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.24.4")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.24.7")
 
     // Room Database
     implementation("androidx.room:room-runtime:2.6.1")
