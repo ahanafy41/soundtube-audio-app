@@ -58,7 +58,12 @@ class AudioDownloadManager(private val context: Context) {
                 val targetFile = File(downloadDir, "${videoId}_${safeTitle}.m4a")
                 val tempFile = File(downloadDir, "${videoId}_${safeTitle}.m4a.tmp")
 
-                val request = Request.Builder().url(streamUrl).build()
+                val request = Request.Builder()
+                    .url(streamUrl)
+                    .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
+                    .addHeader("Referer", "https://www.youtube.com/")
+                    .addHeader("Origin", "https://www.youtube.com")
+                    .build()
                 val response = client.newCall(request).execute()
 
                 if (!response.isSuccessful) {

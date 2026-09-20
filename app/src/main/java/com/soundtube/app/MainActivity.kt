@@ -2,6 +2,7 @@ package com.soundtube.app
 
 import android.content.ComponentName
 import android.content.Context
+import android.widget.Toast
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -252,23 +253,38 @@ fun MainAppScaffold(
             when (currentTab) {
                 SoundTubeTab.SEARCH -> SearchScreen(
                     onSelectVideo = { item ->
+                        Toast.makeText(context, "جارٍ تجهيز وتشغيل: ${item.title}", Toast.LENGTH_SHORT).show()
                         coroutineScope.launch {
                             val result = NewPipeExtractorHelper.getAudioStreamUrl(item.videoId)
                             result.onSuccess { info ->
-                                onPlayAudio(info)
+                                withContext(Dispatchers.Main) {
+                                    onPlayAudio(info)
+                                }
+                            }.onFailure { err ->
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "فشل استخراج الصوت: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
                             }
                         }
                     },
                     onDownloadVideo = { item ->
+                        Toast.makeText(context, "جارٍ استخراج رابط التنزيل: ${item.title}", Toast.LENGTH_SHORT).show()
                         coroutineScope.launch {
                             val result = NewPipeExtractorHelper.getAudioStreamUrl(item.videoId)
                             result.onSuccess { info ->
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "بدأ تنزيل: ${info.title}", Toast.LENGTH_SHORT).show()
+                                }
                                 downloadManager.downloadAudio(
                                     videoId = info.videoId,
                                     title = info.title,
                                     channelTitle = info.channelTitle,
                                     streamUrl = info.streamUrl
                                 )
+                            }.onFailure { err ->
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "فشل التنزيل: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
                             }
                         }
                     },
@@ -280,6 +296,9 @@ fun MainAppScaffold(
                                 avatarUrl = null
                             )
                             database.subscriptionDao().subscribe(sub)
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "تمت متابعة قناة: ${item.uploaderName}", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 )
@@ -471,18 +490,22 @@ fun SearchScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable { onSelectVideo(item) }
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = "مقطع: ${item.title}، قناة: ${item.uploaderName}، المدة: ${item.durationText ?: "غير معروفة"}. اضغط مرتين للتشغيل"
-                            }
+                            .padding(vertical = 4.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Row(
                             modifier = Modifier.padding(12.dp).fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onSelectVideo(item) }
+                                    .semantics(mergeDescendants = true) {
+                                        contentDescription = "مقطع: ${item.title}، قناة: ${item.uploaderName}، المدة: ${item.durationText ?: "غير معروفة"}. اضغط مرتين للتشغيل"
+                                    }
+                            ) {
                                 Text(
                                     text = item.title,
                                     style = MaterialTheme.typography.titleMedium,
@@ -494,7 +517,15 @@ fun SearchScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Row {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { onSelectVideo(item) },
+                                    modifier = Modifier.semantics {
+                                        contentDescription = "تشغيل صوت ${item.title}"
+                                    }
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                                }
                                 IconButton(
                                     onClick = { onSubscribe(item) },
                                     modifier = Modifier.semantics {
