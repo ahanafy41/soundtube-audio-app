@@ -226,6 +226,7 @@ object NewPipeExtractorHelper {
             val items = searchExtractor.initialPage?.items ?: emptyList()
             for (item in items) {
                 if (item is StreamInfoItem) {
+                    val uploadDate = item.textualUploadDate ?: item.uploadDate?.date()?.toString()
                     results.add(
                         VideoFeedItem(
                             videoId = item.url?.substringAfterLast("v=")?.substringBefore("&") ?: item.url ?: "",
@@ -234,7 +235,8 @@ object NewPipeExtractorHelper {
                             uploaderUrl = item.uploaderUrl,
                             durationText = if (item.duration > 0) formatDuration(item.duration) else null,
                             durationSeconds = item.duration,
-                            thumbnailUrl = item.thumbnails?.firstOrNull()?.url
+                            thumbnailUrl = item.thumbnails?.firstOrNull()?.url,
+                            uploadDate = uploadDate
                         )
                     )
                 }
@@ -261,6 +263,7 @@ object NewPipeExtractorHelper {
             val items = tabExtractor.initialPage?.items ?: emptyList()
             for (item in items) {
                 if (item is StreamInfoItem) {
+                    val uploadDate = item.textualUploadDate ?: item.uploadDate?.date()?.toString()
                     results.add(
                         VideoFeedItem(
                             videoId = item.url?.substringAfterLast("v=")?.substringBefore("&") ?: item.url ?: "",
@@ -269,7 +272,8 @@ object NewPipeExtractorHelper {
                             uploaderUrl = channelUrl,
                             durationText = if (item.duration > 0) formatDuration(item.duration) else null,
                             durationSeconds = item.duration,
-                            thumbnailUrl = item.thumbnails?.firstOrNull()?.url
+                            thumbnailUrl = item.thumbnails?.firstOrNull()?.url,
+                            uploadDate = uploadDate
                         )
                     )
                 }

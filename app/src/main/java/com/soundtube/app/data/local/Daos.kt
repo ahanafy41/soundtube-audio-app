@@ -32,8 +32,11 @@ interface PlaybackHistoryDao {
 
 @Dao
 interface SubscriptionDao {
-    @Query("SELECT * FROM subscriptions ORDER BY subscribedAt DESC")
+    @Query("SELECT * FROM subscriptions ORDER BY channelTitle COLLATE NOCASE ASC")
     fun getAllSubscriptions(): Flow<List<Subscription>>
+
+    @Query("SELECT * FROM subscriptions ORDER BY subscribedAt DESC")
+    fun getAllSubscriptionsByDate(): Flow<List<Subscription>>
 
     @Query("SELECT EXISTS(SELECT 1 FROM subscriptions WHERE channelId = :channelId)")
     fun isSubscribedFlow(channelId: String): Flow<Boolean>

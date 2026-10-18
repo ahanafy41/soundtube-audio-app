@@ -187,6 +187,15 @@ fun MainAppScaffold(
     val coroutineScope = rememberCoroutineScope()
     val database = remember { SoundTubeDatabase.getInstance(context) }
     val downloadManager = remember { AudioDownloadManager.getInstance(context) }
+    val updateManager = remember { com.soundtube.app.update.AppUpdateManager(context) }
+
+    var updateInfo by remember { mutableStateOf<com.soundtube.app.update.UpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var isDownloadingUpdate by remember { mutableStateOf(false) }
+    var updateProgressPercent by remember { mutableIntStateOf(0) }
+    var updateDownloadedBytes by remember { mutableLongStateOf(0L) }
+    var updateTotalBytes by remember { mutableLongStateOf(0L) }
+    var updateStatusAnnouncement by remember { mutableStateOf("") }
 
     // Request Runtime Permissions for Storage and Notifications
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -204,6 +213,17 @@ fun MainAppScaffold(
         }
         if (needed.isNotEmpty()) {
             permissionLauncher.launch(needed.toTypedArray())
+        }
+
+        // Silent check for updates on startup
+        coroutineScope.launch {
+            updateManager.checkForUpdates().onSuccess { info ->
+                if (info.isUpdateAvailable) {
+                    updateInfo = info
+                    showUpdateDialog = true
+                    updateStatusAnnouncement = "يتوفر تحديث جديد للتطبيق بإصدار ${info.versionName}"
+                }
+            }
         }
     }
 
@@ -516,6 +536,144 @@ fun MainAppScaffold(
             }
         }
     }
+
+    if (showUpdateDialog && updateInfo != null) {
+        val info = updateInfo!!
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDownloadingUpdate) {
+                    showUpdateDialog = false
+                }
+            },
+            title = {
+                Text(
+                    text = "تحديث جديد متاح (${info.versionName})",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (updateStatusAnnouncement.isNotBlank()) {
+                        Text(
+                            text = updateStatusAnnouncement,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(bottom = 8.dp)
+                                .semantics {
+                                    liveRegion = LiveRegionMode.Polite
+                                    contentDescription = updateStatusAnnouncement
+                                }
+                        )
+                    }
+
+                    if (info.releaseNotes.isNotBlank()) {
+                        Text(
+                            text = "ما الجديد في هذا الإصدار:",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = info.releaseNotes,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (isDownloadingUpdate) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            if (updateProgressPercent >= 0) {
+                                LinearProgressIndicator(
+                                    progress = { updateProgressPercent / 100f },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .semantics {
+                                            contentDescription = "نسبة تقدم تنزيل التحديث: $updateProgressPercent بالمئة"
+                                        }
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                val mbDownloaded = updateDownloadedBytes / (1024 * 1024f)
+                                val mbTotal = updateTotalBytes / (1024 * 1024f)
+                                Text(
+                                    text = "تم تنزيل: ${"%.1f".format(mbDownloaded)} من ${"%.1f".format(mbTotal)} ميجابايت ($updateProgressPercent%)",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            } else {
+                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "جارٍ تنزيل ملف التحديث...",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (!isDownloadingUpdate) {
+                    Button(
+                        onClick = {
+                            val activity = context as? ComponentActivity
+                            if (activity == null) {
+                                Toast.makeText(context, "تعذر تحديد نافذة التثبيت", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            isDownloadingUpdate = true
+                            updateStatusAnnouncement = "بدأ تنزيل التحديث، يرجى الانتظار..."
+                            coroutineScope.launch {
+                                val downloadResult = updateManager.downloadUpdate(info.apkUrl) { percent, downBytes, totBytes ->
+                                    updateProgressPercent = percent
+                                    updateDownloadedBytes = downBytes
+                                    updateTotalBytes = totBytes
+                                    if (percent % 25 == 0 && percent > 0) {
+                                        updateStatusAnnouncement = "تم تنزيل $percent بالمئة من التحديث"
+                                    }
+                                }
+                                isDownloadingUpdate = false
+                                downloadResult.onSuccess { apkFile ->
+                                    updateStatusAnnouncement = "اكتمل التنزيل بنجاح. جارٍ فتح شاشة التثبيت..."
+                                    showUpdateDialog = false
+                                    val installResult = updateManager.installApk(activity, apkFile)
+                                    installResult.onFailure { err ->
+                                        Toast.makeText(context, "تنبيه التثبيت: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                                }.onFailure { err ->
+                                    updateStatusAnnouncement = "فشل تنزيل التحديث: ${err.localizedMessage}"
+                                    Toast.makeText(context, "فشل تنزيل التحديث: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .height(48.dp)
+                            .semantics {
+                                contentDescription = "تحديث وتثبيت الآن"
+                            }
+                    ) {
+                        Text("تحديث وتثبيت الآن")
+                    }
+                }
+            },
+            dismissButton = {
+                if (!isDownloadingUpdate) {
+                    OutlinedButton(
+                        onClick = { showUpdateDialog = false },
+                        modifier = Modifier
+                            .height(48.dp)
+                            .semantics {
+                                contentDescription = "تأجيل التحديث، لاحقاً"
+                            }
+                    ) {
+                        Text("لاحقاً")
+                    }
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -766,14 +924,28 @@ fun SubscriptionsScreen(
     onSelectChannel: (Subscription) -> Unit,
     onOpenAccountSync: () -> Unit
 ) {
-    val subscriptions by database.subscriptionDao().getAllSubscriptions().collectAsState(initial = emptyList())
+    var sortAlphabetical by remember { mutableStateOf(true) }
+    val subscriptions by if (sortAlphabetical) {
+        database.subscriptionDao().getAllSubscriptions().collectAsState(initial = emptyList())
+    } else {
+        database.subscriptionDao().getAllSubscriptionsByDate().collectAsState(initial = emptyList())
+    }
+
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredSubscriptions = remember(subscriptions, searchQuery) {
+        if (searchQuery.isBlank()) {
+            subscriptions
+        } else {
+            subscriptions.filter { it.channelTitle.contains(searchQuery.trim(), ignoreCase = true) }
+        }
+    }
     val coroutineScope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 12.dp),
+                .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -781,16 +953,35 @@ fun SubscriptionsScreen(
                 text = "قنواتي المشترك بها",
                 style = MaterialTheme.typography.titleLarge
             )
-            IconButton(
-                onClick = onOpenAccountSync,
-                modifier = Modifier.semantics {
-                    contentDescription = "فتح شاشة إدارة الحساب والمزامنة واستيراد ملفات Takeout"
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { sortAlphabetical = !sortAlphabetical },
+                    modifier = Modifier.semantics {
+                        contentDescription = if (sortAlphabetical) {
+                            "تبديل الترتيب، الحالي: أبجدياً. اضغط للترتيب حسب الأحدث اشتراكاً"
+                        } else {
+                            "تبديل الترتيب، الحالي: الأحدث اشتراكاً. اضغط للترتيب أبجدياً"
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Sort,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ManageAccounts,
-                    contentDescription = null
-                )
+
+                IconButton(
+                    onClick = onOpenAccountSync,
+                    modifier = Modifier.semantics {
+                        contentDescription = "فتح شاشة إدارة الحساب والمزامنة واستيراد ملفات Takeout والتحديثات"
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ManageAccounts,
+                        contentDescription = null
+                    )
+                }
             }
         }
 
@@ -816,37 +1007,100 @@ fun SubscriptionsScreen(
                 }
             }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(subscriptions, key = { it.channelId }) { sub ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable { onSelectChannel(sub) }
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = "قناة ${sub.channelTitle}"
+            // Quick Search Filter Field
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("تصفية القنوات بالاسم") },
+                placeholder = { Text("اكتب اسم القناة للبحث السريع...") },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = { searchQuery = "" },
+                            modifier = Modifier.semantics {
+                                contentDescription = "مسح نص البحث السريع"
                             }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = sub.channelTitle,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            IconButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        database.subscriptionDao().unsubscribe(sub.channelId)
-                                    }
-                                },
-                                modifier = Modifier.semantics {
-                                    contentDescription = "إلغاء الاشتراك من قناة ${sub.channelTitle}"
+                            Icon(Icons.Default.Close, contentDescription = null)
+                        }
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .semantics {
+                        contentDescription = "حقل البحث السريع لتصفية القنوات"
+                    }
+            )
+
+            // Live Accessibility Announcement for search count & sort state
+            val sortLabel = if (sortAlphabetical) "أبجدياً" else "الأحدث اشتراكاً"
+            val countText = if (searchQuery.isNotBlank()) {
+                "تم العثور على ${filteredSubscriptions.size} قناة مطابقة للبحث ($sortLabel)"
+            } else {
+                "إجمالي القنوات: ${filteredSubscriptions.size} مرتبة $sortLabel"
+            }
+            Text(
+                text = countText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .padding(bottom = 8.dp)
+                    .semantics {
+                        liveRegion = LiveRegionMode.Polite
+                        contentDescription = countText
+                    }
+            )
+
+            if (filteredSubscriptions.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "لا توجد قنوات تطابق: \"$searchQuery\"",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(filteredSubscriptions, key = { it.channelId }) { sub ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable { onSelectChannel(sub) }
+                                .semantics(mergeDescendants = true) {
+                                    contentDescription = "قناة ${sub.channelTitle}"
                                 }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Delete, contentDescription = null)
+                                Text(
+                                    text = sub.channelTitle,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            database.subscriptionDao().unsubscribe(sub.channelId)
+                                        }
+                                    },
+                                    modifier = Modifier.semantics {
+                                        contentDescription = "إلغاء الاشتراك من قناة ${sub.channelTitle}"
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = null)
+                                }
                             }
                         }
                     }

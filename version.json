@@ -1,0 +1,6 @@
+{
+  "versionCode": 3,
+  "versionName": "1.2.0",
+  "releaseNotes": "1. فرز المقاطع ترتيباً زمنياً (أحدث المقاطع أولاً دائماً).\n2. تنظيم الاشتراكات أبجدياً مع حقل بحث سريع.\n3. ميزة التحديث التلقائي المباشر من داخل التطبيق.",
+  "apkUrl": "https://github.com/ahanafy41/soundtube-audio-app/releases/download/latest/app-debug.apk"
+}

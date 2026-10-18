@@ -24,7 +24,8 @@ fun AccessibleVideoCard(
     modifier: Modifier = Modifier
 ) {
     val durationLabel = item.durationText ?: "المدة غير محددة"
-    val a11ySummary = "مقطع: ${item.title}، الناشر: ${item.uploaderName}، المدة: $durationLabel. اضغط مرتين للتشغيل فوراً، أو اضغط مطولاً لخيارات التنزيل والقناة."
+    val dateLabel = if (!item.uploadDate.isNullOrBlank()) "، تاريخ النشر: ${item.uploadDate}" else ""
+    val a11ySummary = "مقطع: ${item.title}، الناشر: ${item.uploaderName}، المدة: $durationLabel$dateLabel. اضغط مرتين للتشغيل فوراً، أو اضغط مطولاً لخيارات التنزيل والقناة."
 
     Card(
         modifier = modifier
@@ -73,8 +74,17 @@ fun AccessibleVideoCard(
                     maxLines = 2
                 )
                 Spacer(modifier = Modifier.height(4.dp))
+                val infoText = buildString {
+                    append(item.uploaderName)
+                    append(" • ")
+                    append(durationLabel)
+                    if (!item.uploadDate.isNullOrBlank()) {
+                        append(" • ")
+                        append(item.uploadDate)
+                    }
+                }
                 Text(
-                    text = "${item.uploaderName} • $durationLabel",
+                    text = infoText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -134,8 +144,16 @@ fun VideoOptionsBottomSheet(
                 text = item.uploaderName,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(bottom = if (!item.uploadDate.isNullOrBlank()) 4.dp else 16.dp)
             )
+            if (!item.uploadDate.isNullOrBlank()) {
+                Text(
+                    text = "تاريخ النشر: ${item.uploadDate}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            }
 
             HorizontalDivider()
             Spacer(modifier = Modifier.height(8.dp))

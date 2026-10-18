@@ -1,6 +1,6 @@
 {
   "project_name": "SoundTube",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "track": "Track A: Desktop & Offline",
   "language": "Kotlin",
   "frameworks": [
@@ -131,6 +131,34 @@
       "description": "Store all downloads in a user-accessible public directory (/sdcard/Download/SoundTube/). Request runtime storage and notification permissions on app launch with accessible prompts.",
       "priority": "P0",
       "verification_criteria": "Downloads appear in /sdcard/Download/SoundTube/; runtime permissions requested on Android; files accessible by external players."
+    },
+    {
+      "id": "REQ-016",
+      "title": "Chronological Video Feed Sorting (Latest First)",
+      "description": "Sort video feed items chronologically in HomeScreen and ChannelDetailsScreen so that newest uploads appear first. Extract and format textualUploadDate/uploadDate for accessible readout on video cards.",
+      "priority": "P0",
+      "verification_criteria": "HomeScreen and ChannelDetailsScreen display recent uploads at the top with clear textual date labels (e.g. 'منذ ساعتين'); zero inverted chronological ordering."
+    },
+    {
+      "id": "REQ-017",
+      "title": "Subscriptions Alphabetical Ordering & Instant Search Filter",
+      "description": "Default subscriptions list ordering to alphabetical (A-Z / أ-ي) in Room SubscriptionDao. Provide sort toggle (Alphabetical vs Newest Subscribed) and an accessible instant search field for fast channel filtering.",
+      "priority": "P1",
+      "verification_criteria": "Subscriptions tab lists channels alphabetically by default; search field filters channels smoothly with instant TalkBack/Jieshuo feedback."
+    },
+    {
+      "id": "REQ-018",
+      "title": "In-App OTA Auto-Update System",
+      "description": "Integrated AppUpdateManager checking remote version.json and GitHub releases. Download updates with progress announcements, verify APK integrity/package name, and trigger system package installer seamlessly using FileProvider and REQUEST_INSTALL_PACKAGES.",
+      "priority": "P0",
+      "verification_criteria": "App checks for updates on startup and on demand; downloads signed APK and triggers in-place system installer over existing version without uninstalling."
+    },
+    {
+      "id": "REQ-019",
+      "title": "Automated GitHub Releases Publishing",
+      "description": "Configure GitHub Actions workflow to publish verified signed APK as a GitHub Release (tag 'latest' and version tag) upon push to main, maintaining permanent keystore signature.",
+      "priority": "P1",
+      "verification_criteria": "GitHub Actions automatically generates release with signed APK; version.json matches release tag."
     }
   ],
   "entry_points": {

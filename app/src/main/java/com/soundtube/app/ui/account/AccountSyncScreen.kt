@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,6 +47,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -91,6 +95,16 @@ fun AccountSyncScreen(
     var isSyncing by remember { mutableStateOf(false) }
     var syncStatusAnnouncement by remember { mutableStateOf("جاهز للمزامنة") }
     var showLoginWebView by remember { mutableStateOf(false) }
+
+    val updateManager = remember { com.soundtube.app.update.AppUpdateManager(context) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var updateInfo by remember { mutableStateOf<com.soundtube.app.update.UpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var isDownloadingUpdate by remember { mutableStateOf(false) }
+    var updateProgressPercent by remember { mutableIntStateOf(0) }
+    var updateDownloadedBytes by remember { mutableLongStateOf(0L) }
+    var updateTotalBytes by remember { mutableLongStateOf(0L) }
+    val currentVersionName = remember { updateManager.getCurrentVersionName() }
 
     // SAF Import CSV Launcher
     val importCsvLauncher = rememberLauncherForActivityResult(
@@ -448,6 +462,172 @@ fun AccountSyncScreen(
                     }
                 }
             }
+
+            // Section 4: In-App Updates Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = "قسم التحديثات، الإصدار الحالي $currentVersionName"
+                    },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "تحديثات التطبيق",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "الإصدار المثبت حالياً: $currentVersionName",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "يمكنك التحقق من وجود إصدارات أحدث وتثبيتها تلقائياً ومباشرة من داخل التطبيق.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            isCheckingUpdate = true
+                            syncStatusAnnouncement = "جارٍ التحقق من وجود تحديثات جديدة..."
+                            coroutineScope.launch {
+                                val result = updateManager.checkForUpdates()
+                                isCheckingUpdate = false
+                                result.fold(
+                                    onSuccess = { info ->
+                                        if (info.isUpdateAvailable) {
+                                            updateInfo = info
+                                            showUpdateDialog = true
+                                            syncStatusAnnouncement = "يتوفر تحديث جديد: إصدار ${info.versionName}"
+                                        } else {
+                                            syncStatusAnnouncement = "أنت تستخدم أحدث إصدار متاح حالياً ($currentVersionName)"
+                                            Toast.makeText(context, syncStatusAnnouncement, Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    onFailure = { error ->
+                                        syncStatusAnnouncement = "تعذر التحقق من التحديثات: ${error.localizedMessage}"
+                                        Toast.makeText(context, syncStatusAnnouncement, Toast.LENGTH_LONG).show()
+                                    }
+                                )
+                            }
+                        },
+                        enabled = !isCheckingUpdate,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .semantics {
+                                contentDescription = "التحقق من وجود تحديثات جديدة للتطبيق"
+                            }
+                    ) {
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text("جارٍ التحقق...")
+                        } else {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null)
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text("التحقق من وجود تحديثات")
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    if (showUpdateDialog && updateInfo != null) {
+        val info = updateInfo!!
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDownloadingUpdate) showUpdateDialog = false
+            },
+            title = {
+                Text("تحديث جديد متاح (${info.versionName})")
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (info.releaseNotes.isNotBlank()) {
+                        Text("ما الجديد في هذا الإصدار:", style = MaterialTheme.typography.titleSmall)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(info.releaseNotes, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    if (isDownloadingUpdate) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                            if (updateProgressPercent >= 0) {
+                                LinearProgressIndicator(
+                                    progress = { updateProgressPercent / 100f },
+                                    modifier = Modifier.fillMaxWidth().height(8.dp).semantics {
+                                        contentDescription = "نسبة التقدم: $updateProgressPercent بالمئة"
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                val mbDown = updateDownloadedBytes / (1024 * 1024f)
+                                val mbTot = updateTotalBytes / (1024 * 1024f)
+                                Text(
+                                    text = "تم تنزيل: ${"%.1f".format(mbDown)} من ${"%.1f".format(mbTot)} ميجابايت ($updateProgressPercent%)",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            } else {
+                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (!isDownloadingUpdate) {
+                    Button(
+                        onClick = {
+                            val activity = context as? android.app.Activity
+                            if (activity == null) {
+                                Toast.makeText(context, "تعذر تحديد نافذة التثبيت", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            isDownloadingUpdate = true
+                            syncStatusAnnouncement = "جارٍ تنزيل التحديث..."
+                            coroutineScope.launch {
+                                val dlRes = updateManager.downloadUpdate(info.apkUrl) { percent, down, total ->
+                                    updateProgressPercent = percent
+                                    updateDownloadedBytes = down
+                                    updateTotalBytes = total
+                                }
+                                isDownloadingUpdate = false
+                                dlRes.onSuccess { apkFile ->
+                                    showUpdateDialog = false
+                                    updateManager.installApk(activity, apkFile).onFailure { err ->
+                                        Toast.makeText(context, "تنبيه التثبيت: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                                }.onFailure { err ->
+                                    Toast.makeText(context, "فشل التنزيل: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.height(48.dp).semantics { contentDescription = "تحديث وتثبيت الآن" }
+                    ) {
+                        Text("تحديث وتثبيت الآن")
+                    }
+                }
+            },
+            dismissButton = {
+                if (!isDownloadingUpdate) {
+                    OutlinedButton(
+                        onClick = { showUpdateDialog = false },
+                        modifier = Modifier.height(48.dp).semantics { contentDescription = "تأجيل، لاحقاً" }
+                    ) {
+                        Text("لاحقاً")
+                    }
+                }
+            }
+        )
     }
 }

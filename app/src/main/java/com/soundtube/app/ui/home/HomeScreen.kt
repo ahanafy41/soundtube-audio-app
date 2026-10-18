@@ -74,11 +74,12 @@ fun HomeScreen(
             }
             val results = deferredList.awaitAll().flatten()
             val distinctResults = results.distinctBy { it.videoId }
+                .sortedWith(compareByDescending { com.soundtube.app.data.model.parseUploadDateScore(it.uploadDate) })
 
             withContext(Dispatchers.Main) {
                 feedItems = distinctResults
                 isLoading = false
-                statusAnnouncement = "تم تحميل ${distinctResults.size} مقطع في الخلاصة الرئيسية."
+                statusAnnouncement = "تم تحميل ${distinctResults.size} مقطع في الخلاصة الرئيسية (الأحدث أولاً)."
             }
         }
     }

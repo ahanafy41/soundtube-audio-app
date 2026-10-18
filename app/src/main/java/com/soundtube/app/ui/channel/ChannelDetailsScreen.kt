@@ -57,8 +57,8 @@ fun ChannelDetailsScreen(
             val result = NewPipeExtractorHelper.getChannelFeed(channelId)
             isLoading = false
             result.onSuccess { list ->
-                videos = list
-                statusAnnouncement = "تم تحميل ${list.size} مقطع لقناة $channelTitle."
+                videos = list.sortedWith(compareByDescending { com.soundtube.app.data.model.parseUploadDateScore(it.uploadDate) })
+                statusAnnouncement = "تم تحميل ${list.size} مقطع لقناة $channelTitle (الأحدث أولاً)."
             }.onFailure { err ->
                 statusAnnouncement = "تعذر تحميل مقاطع القناة: ${err.localizedMessage}"
             }

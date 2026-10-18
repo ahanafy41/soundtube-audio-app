@@ -73,3 +73,12 @@
 - [x] Clean video list item cards: single tap plays immediately, long-click opens options modal sheet with Custom Accessibility Actions for TalkBack and Jieshuo (REQ-013).
 - [x] Build rich HomeScreen landing tab with subscriptions feed, quick filter chips, and refresh (REQ-012).
 - [x] Add permanent top-bar search action and channel details navigation (ChannelDetailsScreen) with dedicated uploads feed (REQ-011, REQ-012).
+
+## Phase 13: Feed Chronology Fixes & In-App OTA Auto-Update (REQ-016 through REQ-019)
+- [x] Implement chronological video sorting (newest first) in NewPipeExtractorHelper, HomeScreen, and ChannelDetailsScreen with upload date formatting (REQ-016).
+- [x] Add alphabetical default ordering, sort toggle (Alphabetical vs Newest), and instant accessible search filter in SubscriptionsScreen (REQ-017).
+- [x] Add REQUEST_INSTALL_PACKAGES permission and FileProvider xml path in AndroidManifest.xml (REQ-018).
+- [x] Implement AppUpdateManager handling version check, APK download with live progress, package validation, and system installer launch (REQ-018).
+- [x] Add startup update prompt dialog and manual "التحقق من وجود تحديثات" button in AccountSyncScreen/MainActivity (REQ-018).
+- [x] Create version.json in repository root and configure GitHub Actions workflow for automatic Release publishing on push to main (REQ-019).
+- [x] Bump version to 1.2.0 (versionCode 3) in build.gradle.kts and verify compilation (REQ-018, REQ-019).
