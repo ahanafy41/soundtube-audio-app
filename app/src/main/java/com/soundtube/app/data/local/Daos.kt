@@ -44,6 +44,12 @@ interface SubscriptionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun subscribe(subscription: Subscription)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(subscriptions: List<Subscription>)
+
+    @Query("SELECT * FROM subscriptions ORDER BY channelTitle COLLATE NOCASE ASC")
+    suspend fun getAllSubscriptionsList(): List<Subscription>
+
     @Query("DELETE FROM subscriptions WHERE channelId = :channelId")
     suspend fun unsubscribe(channelId: String)
 }

@@ -154,6 +154,7 @@ fun MainAppScaffold(
 ) {
     val context = LocalContext.current
     var currentTab by remember { mutableStateOf(SoundTubeTab.SEARCH) }
+    var showAccountSync by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val database = remember { SoundTubeDatabase.getInstance(context) }
     val downloadManager = remember { AudioDownloadManager.getInstance(context) }
@@ -225,8 +226,11 @@ fun MainAppScaffold(
                 ) {
                     SoundTubeTab.values().forEach { tab ->
                         NavigationBarItem(
-                            selected = currentTab == tab,
-                            onClick = { currentTab = tab },
+                            selected = currentTab == tab && !showAccountSync,
+                            onClick = {
+                                currentTab = tab
+                                showAccountSync = false
+                            },
                             icon = {
                                 when (tab) {
                                     SoundTubeTab.SEARCH -> Icon(Icons.Default.Search, contentDescription = null)
@@ -250,65 +254,72 @@ fun MainAppScaffold(
         }
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            when (currentTab) {
-                SoundTubeTab.SEARCH -> SearchScreen(
-                    onSelectVideo = { item ->
-                        Toast.makeText(context, "جارٍ تجهيز وتشغيل: ${item.title}", Toast.LENGTH_SHORT).show()
-                        coroutineScope.launch {
-                            val result = NewPipeExtractorHelper.getAudioStreamUrl(item.videoId)
-                            result.onSuccess { info ->
-                                withContext(Dispatchers.Main) {
-                                    onPlayAudio(info)
-                                }
-                            }.onFailure { err ->
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "فشل استخراج الصوت: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        }
-                    },
-                    onDownloadVideo = { item ->
-                        Toast.makeText(context, "جارٍ استخراج رابط التنزيل: ${item.title}", Toast.LENGTH_SHORT).show()
-                        coroutineScope.launch {
-                            val result = NewPipeExtractorHelper.getAudioStreamUrl(item.videoId)
-                            result.onSuccess { info ->
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "بدأ تنزيل: ${info.title}", Toast.LENGTH_SHORT).show()
-                                }
-                                downloadManager.downloadAudio(
-                                    videoId = info.videoId,
-                                    title = info.title,
-                                    channelTitle = info.channelTitle,
-                                    streamUrl = info.streamUrl
-                                )
-                            }.onFailure { err ->
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "فشل التنزيل: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        }
-                    },
-                    onSubscribe = { item ->
-                        coroutineScope.launch {
-                            val sub = Subscription(
-                                channelId = item.uploaderUrl ?: item.uploaderName,
-                                channelTitle = item.uploaderName,
-                                avatarUrl = null
-                            )
-                            database.subscriptionDao().subscribe(sub)
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(context, "تمت متابعة قناة: ${item.uploaderName}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                )
-
-                SoundTubeTab.SUBSCRIPTIONS -> SubscriptionsScreen(
+            if (showAccountSync) {
+                com.soundtube.app.ui.account.AccountSyncScreen(
                     database = database,
-                    onSelectChannel = { _ ->
-                        // Switch or filter channel
-                    }
+                    onNavigateBack = { showAccountSync = false }
                 )
+            } else {
+                when (currentTab) {
+                    SoundTubeTab.SEARCH -> SearchScreen(
+                        onSelectVideo = { item ->
+                            Toast.makeText(context, "جارٍ تجهيز وتشغيل: ${item.title}", Toast.LENGTH_SHORT).show()
+                            coroutineScope.launch {
+                                val result = NewPipeExtractorHelper.getAudioStreamUrl(item.videoId)
+                                result.onSuccess { info ->
+                                    withContext(Dispatchers.Main) {
+                                        onPlayAudio(info)
+                                    }
+                                }.onFailure { err ->
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "فشل استخراج الصوت: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        },
+                        onDownloadVideo = { item ->
+                            Toast.makeText(context, "جارٍ استخراج رابط التنزيل: ${item.title}", Toast.LENGTH_SHORT).show()
+                            coroutineScope.launch {
+                                val result = NewPipeExtractorHelper.getAudioStreamUrl(item.videoId)
+                                result.onSuccess { info ->
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "بدأ تنزيل: ${info.title}", Toast.LENGTH_SHORT).show()
+                                    }
+                                    downloadManager.downloadAudio(
+                                        videoId = info.videoId,
+                                        title = info.title,
+                                        channelTitle = info.channelTitle,
+                                        streamUrl = info.streamUrl
+                                    )
+                                }.onFailure { err ->
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "فشل التنزيل: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        },
+                        onSubscribe = { item ->
+                            coroutineScope.launch {
+                                val sub = Subscription(
+                                    channelId = item.uploaderUrl ?: item.uploaderName,
+                                    channelTitle = item.uploaderName,
+                                    avatarUrl = null
+                                )
+                                database.subscriptionDao().subscribe(sub)
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "تمت متابعة قناة: ${item.uploaderName}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    )
+
+                    SoundTubeTab.SUBSCRIPTIONS -> SubscriptionsScreen(
+                        database = database,
+                        onSelectChannel = { _ ->
+                            // Switch or filter channel
+                        },
+                        onOpenAccountSync = { showAccountSync = true }
+                    )
 
                 SoundTubeTab.DOWNLOADS -> DownloadsScreen(
                     database = database,
@@ -330,6 +341,7 @@ fun MainAppScaffold(
             }
         }
     }
+}
 }
 
 @Composable
@@ -554,26 +566,58 @@ fun SearchScreen(
 @Composable
 fun SubscriptionsScreen(
     database: SoundTubeDatabase,
-    onSelectChannel: (Subscription) -> Unit
+    onSelectChannel: (Subscription) -> Unit,
+    onOpenAccountSync: () -> Unit
 ) {
     val subscriptions by database.subscriptionDao().getAllSubscriptions().collectAsState(initial = emptyList())
     val coroutineScope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text(
-            text = "قنواتي المحلية المشترك بها",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "قنواتي المشترك بها",
+                style = MaterialTheme.typography.titleLarge
+            )
+            IconButton(
+                onClick = onOpenAccountSync,
+                modifier = Modifier.semantics {
+                    contentDescription = "فتح شاشة إدارة الحساب والمزامنة واستيراد ملفات Takeout"
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ManageAccounts,
+                    contentDescription = null
+                )
+            }
+        }
 
         if (subscriptions.isEmpty()) {
-            Text(
-                text = "لا توجد اشتراكات حتى الآن. يمكنك متابعة القنوات من نتائج البحث.",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.semantics {
-                    contentDescription = "لا توجد قنوات مشترك بها حالياً"
+            Column {
+                Text(
+                    text = "لا توجد اشتراكات حتى الآن. يمكنك متابعة القنوات من نتائج البحث أو مزامنتها مع حسابك.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.semantics {
+                        contentDescription = "لا توجد قنوات مشترك بها حالياً"
+                    }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = onOpenAccountSync,
+                    modifier = Modifier.semantics {
+                        contentDescription = "فتح شاشة إدارة الحساب لتسجيل الدخول أو استيراد ملف Takeout CSV"
+                    }
+                ) {
+                    Icon(Icons.Default.Sync, contentDescription = null)
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text("إدارة الحساب ومزامنة الاشتراكات")
                 }
-            )
+            }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(subscriptions, key = { it.channelId }) { sub ->

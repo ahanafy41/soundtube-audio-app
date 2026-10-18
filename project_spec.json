@@ -7,8 +7,11 @@
     "Android Jetpack Compose",
     "AndroidX Media3 (ExoPlayer 1.4.1)",
     "AndroidX MediaSession",
-    "NewPipeExtractor (v0.24.4)",
+    "NewPipeExtractor (v0.26.5)",
     "AndroidX Room (2.6.1)",
+    "AndroidX Security (EncryptedSharedPreferences 1.1.0-alpha06)",
+    "AndroidX WebKit (1.12.0)",
+    "OkHttp 4.12.0",
     "Material 3"
   ],
   "scoping_mode": "Fast-Track",
@@ -16,12 +19,12 @@
     "pattern": "Clean Architecture / MVVM with Offline-First Repository & MediaSessionService",
     "layers": [
       "Domain (UseCases, Models, Contracts)",
-      "Data (NewPipeExtractor Client, Room DB, Media3 DownloadManager, Repositories)",
+      "Data (NewPipeExtractor Client, InnerTube API Client, Room DB, EncryptedSharedPreferences, Media3 DownloadManager, Repositories)",
       "Playback Engine (AndroidX MediaSessionService, ExoPlayer 1.4.1, AudioOnly Player Adapter)",
       "Presentation (Jetpack Compose UI, Material 3, Accessibility Semantics, ViewModels)"
     ],
-    "a11y_strategy": "Strict Screen Reader Optimization (TalkBack and Jieshuo/CSR): explicit contentDescription without emoji noise, liveRegion for async search/playback feedback, custom accessibility actions for list items, minimum 48dp touch targets, semantic state announcements.",
-    "persistence": "AndroidX Room (SQLite) for Subscriptions, Playback Resume State, Download Records, and SimpleCache for Audio Chunks"
+    "a11y_strategy": "Strict Screen Reader Optimization (TalkBack and Jieshuo/CSR): explicit contentDescription without emoji noise, liveRegion for async search/sync/playback feedback, custom accessibility actions for list items, minimum 48dp touch targets, semantic state announcements, trap-free WebView dialogs.",
+    "persistence": "AndroidX Room (SQLite) for Subscriptions, Playback Resume State, Download Records; EncryptedSharedPreferences for Auth Cookies and Session Tokens; SimpleCache for Audio Chunks"
   },
   "requirements": [
     {
@@ -65,6 +68,34 @@
       "description": "Fully tailored for TalkBack and Jieshuo (CSR) screen readers: clear concise contentDescription labels without emoji noise, semantic action labels (e.g., Download, Subscribe, Resume), linear traversal order, and high contrast.",
       "priority": "P0",
       "verification_criteria": "App is 100% operable with screen reader gestures, zero unlabeled buttons, unambiguous announcements for all state transitions."
+    },
+    {
+      "id": "REQ-007",
+      "title": "Google / YouTube Authentication & Encrypted Credential Management",
+      "description": "Secure sign-in via Android WebView bypassing error 403 using Chrome Mobile User-Agent. Extract session cookies (SAPISID, HSID, SSID, SID, LOGIN_INFO) upon authentication completion and persist them securely using AndroidX EncryptedSharedPreferences.",
+      "priority": "P1",
+      "verification_criteria": "User signs in successfully; session cookies and SAPISID are extracted and persisted in EncryptedSharedPreferences; subsequent app launches preserve login status."
+    },
+    {
+      "id": "REQ-008",
+      "title": "InnerTube API Subscriptions Synchronization via SAPISIDHASH",
+      "description": "Authenticate YouTube InnerTube requests using dynamic SAPISIDHASH signature over /youtubei/v1/browse with browseId FEchannels. Ingest full channel subscriptions list with pagination handling and upsert into Room Subscriptions table.",
+      "priority": "P1",
+      "verification_criteria": "API returns HTTP 200 with subscriptions payload; all subscribed channels are ingested into Room database with channelId, title, and avatarUrl."
+    },
+    {
+      "id": "REQ-009",
+      "title": "Offline Google Takeout CSV Import & Export",
+      "description": "Allow account-free subscription synchronization by importing subscriptions.csv exported from Google Takeout. Support selecting file via Storage Access Framework, parsing channel IDs/titles, and batch inserting into Room. Also support exporting local subscriptions to CSV.",
+      "priority": "P1",
+      "verification_criteria": "Selecting subscriptions.csv parses all rows correctly, handles commas and quotes, and populates Room database without errors or network calls."
+    },
+    {
+      "id": "REQ-010",
+      "title": "Accessible Account & Subscriptions Sync Interface",
+      "description": "Dedicated Compose screen and dialogs for account status, one-tap sync, CSV import/export, and logout. Strictly compliant with TalkBack and Jieshuo screen readers: explicit non-emoji contentDescription, polite liveRegion announcements for sync progress, and minimum 48dp touch targets.",
+      "priority": "P0",
+      "verification_criteria": "TalkBack and Jieshuo navigate effortlessly through login, sync, and CSV import flows with zero unlabeled elements and clear progress readouts."
     }
   ],
   "entry_points": {
