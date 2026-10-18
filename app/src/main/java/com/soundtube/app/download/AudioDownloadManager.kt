@@ -1,6 +1,8 @@
 package com.soundtube.app.download
 
 import android.content.Context
+import android.media.MediaScannerConnection
+import android.os.Environment
 import com.soundtube.app.data.local.DownloadRecord
 import com.soundtube.app.data.local.SoundTubeDatabase
 import com.soundtube.app.data.model.DownloadItemState
@@ -32,31 +34,81 @@ class AudioDownloadManager(private val context: Context) {
         return _downloadStates.value[videoId]
     }
 
+    private fun getSoundTubeDownloadDir(): File {
+        val publicDownloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val soundTubeDir = File(publicDownloadDir, "SoundTube")
+        if (soundTubeDir.exists() || soundTubeDir.mkdirs()) {
+            return soundTubeDir
+        }
+        val directSdcardDir = File("/sdcard/Download/SoundTube")
+        if (directSdcardDir.exists() || directSdcardDir.mkdirs()) {
+            return directSdcardDir
+        }
+        val fallback = context.getExternalFilesDir("audio_downloads") ?: context.filesDir
+        if (!fallback.exists()) fallback.mkdirs()
+        return fallback
+    }
+
     fun downloadAudio(
         videoId: String,
         title: String,
         channelTitle: String,
         streamUrl: String
     ) {
+        downloadMedia(
+            videoId = videoId,
+            title = title,
+            channelTitle = channelTitle,
+            streamUrl = streamUrl,
+            isVideo = false,
+            qualityLabel = "M4A"
+        )
+    }
+
+    fun downloadVideo(
+        videoId: String,
+        title: String,
+        channelTitle: String,
+        streamUrl: String,
+        resolution: String = "720p"
+    ) {
+        downloadMedia(
+            videoId = videoId,
+            title = title,
+            channelTitle = channelTitle,
+            streamUrl = streamUrl,
+            isVideo = true,
+            qualityLabel = resolution
+        )
+    }
+
+    fun downloadMedia(
+        videoId: String,
+        title: String,
+        channelTitle: String,
+        streamUrl: String,
+        isVideo: Boolean = false,
+        qualityLabel: String = ""
+    ) {
         val initialState = DownloadItemState(
             videoId = videoId,
             title = title,
             progressPercent = 0,
-            state = DownloadState.DOWNLOADING
+            state = DownloadState.DOWNLOADING,
+            isVideo = isVideo,
+            qualityLabel = qualityLabel
         )
         updateState(videoId, initialState)
 
         coroutineScope.launch {
             try {
-                val downloadDir = context.getExternalFilesDir("audio_downloads") ?: context.filesDir
-                if (!downloadDir.exists()) {
-                    downloadDir.mkdirs()
-                }
-
-                // Sanitize file name
+                val downloadDir = getSoundTubeDownloadDir()
+                val extension = if (isVideo) "mp4" else "m4a"
                 val safeTitle = title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                val targetFile = File(downloadDir, "${videoId}_${safeTitle}.m4a")
-                val tempFile = File(downloadDir, "${videoId}_${safeTitle}.m4a.tmp")
+                val qualitySuffix = if (isVideo && qualityLabel.isNotBlank()) "_${qualityLabel}" else ""
+                val fileName = "${videoId}_${safeTitle}${qualitySuffix}.${extension}"
+                val targetFile = File(downloadDir, fileName)
+                val tempFile = File(downloadDir, "${fileName}.tmp")
 
                 val request = Request.Builder()
                     .url(streamUrl)
@@ -100,7 +152,9 @@ class AudioDownloadManager(private val context: Context) {
                                         progressPercent = percent,
                                         downloadedBytes = downloadedBytes,
                                         totalBytes = totalBytes,
-                                        state = DownloadState.DOWNLOADING
+                                        state = DownloadState.DOWNLOADING,
+                                        isVideo = isVideo,
+                                        qualityLabel = qualityLabel
                                     )
                                 )
                             }
@@ -117,10 +171,22 @@ class AudioDownloadManager(private val context: Context) {
                     tempFile.renameTo(targetFile)
                 }
 
+                // Notify Android MediaScanner so file appears in system file manager and media players
+                try {
+                    val mimeType = if (isVideo) "video/mp4" else "audio/mp4"
+                    MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(targetFile.absolutePath),
+                        arrayOf(mimeType),
+                        null
+                    )
+                } catch (_: Exception) {}
+
                 // Record into Room database
+                val displayTitle = if (isVideo && qualityLabel.isNotBlank()) "$title ($qualityLabel)" else title
                 val record = DownloadRecord(
                     videoId = videoId,
-                    title = title,
+                    title = displayTitle,
                     channelTitle = channelTitle,
                     localFilePath = targetFile.absolutePath,
                     totalBytes = targetFile.length()
@@ -131,12 +197,14 @@ class AudioDownloadManager(private val context: Context) {
                     videoId,
                     DownloadItemState(
                         videoId = videoId,
-                        title = title,
+                        title = displayTitle,
                         progressPercent = 100,
                         downloadedBytes = downloadedBytes,
                         totalBytes = totalBytes,
                         state = DownloadState.COMPLETED,
-                        localFilePath = targetFile.absolutePath
+                        localFilePath = targetFile.absolutePath,
+                        isVideo = isVideo,
+                        qualityLabel = qualityLabel
                     )
                 )
 
@@ -148,7 +216,9 @@ class AudioDownloadManager(private val context: Context) {
                         title = title,
                         progressPercent = 0,
                         state = DownloadState.FAILED,
-                        errorMessage = e.localizedMessage ?: "Download failed"
+                        errorMessage = e.localizedMessage ?: "Download failed",
+                        isVideo = isVideo,
+                        qualityLabel = qualityLabel
                     )
                 )
             }

@@ -1,7 +1,9 @@
 package com.soundtube.app.data.remote
 
 import com.soundtube.app.data.model.AudioStreamInfo
+import com.soundtube.app.data.model.MediaStreamDetails
 import com.soundtube.app.data.model.VideoFeedItem
+import com.soundtube.app.data.model.VideoStreamOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
@@ -15,6 +17,7 @@ import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeChannelL
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeStreamLinkHandlerFactory
 import org.schabi.newpipe.extractor.stream.AudioStream
+import org.schabi.newpipe.extractor.stream.VideoStream
 import org.schabi.newpipe.extractor.stream.StreamExtractor
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.io.IOException
@@ -118,6 +121,92 @@ object NewPipeExtractorHelper {
                 thumbnailUrl = streamExtractor.thumbnails?.firstOrNull()?.url
             )
             Result.success(info)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getVideoStreams(videoId: String): Result<List<VideoStreamOption>> = withContext(Dispatchers.IO) {
+        try {
+            init()
+            val url = if (videoId.startsWith("http")) videoId else "https://www.youtube.com/watch?v=$videoId"
+            val streamExtractor = ServiceList.YouTube.getStreamExtractor(url)
+            streamExtractor.fetchPage()
+
+            val videoStreams = streamExtractor.videoStreams ?: emptyList()
+            val options = videoStreams
+                .filter { !it.content.isNullOrBlank() }
+                .map { vStream ->
+                    VideoStreamOption(
+                        resolution = vStream.resolution ?: "360p",
+                        format = vStream.format?.name ?: "MP4",
+                        streamUrl = vStream.content ?: ""
+                    )
+                }
+                .distinctBy { it.resolution }
+                .sortedByDescending {
+                    it.resolution.filter { char -> char.isDigit() }.toIntOrNull() ?: 0
+                }
+
+            Result.success(options)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getMediaStreamDetails(videoId: String): Result<MediaStreamDetails> = withContext(Dispatchers.IO) {
+        try {
+            init()
+            val url = if (videoId.startsWith("http")) videoId else "https://www.youtube.com/watch?v=$videoId"
+            val streamExtractor = ServiceList.YouTube.getStreamExtractor(url)
+            streamExtractor.fetchPage()
+
+            val audioStreams = streamExtractor.audioStreams ?: emptyList()
+            val sortedAudio = audioStreams.sortedByDescending { it.averageBitrate }
+            val chosenAudio: AudioStream? = sortedAudio.firstOrNull { it.format?.name.equals("M4A", ignoreCase = true) }
+                ?: sortedAudio.firstOrNull()
+
+            val audioInfo = chosenAudio?.let { stream ->
+                AudioStreamInfo(
+                    videoId = streamExtractor.id ?: videoId,
+                    title = streamExtractor.name ?: "Unknown Title",
+                    channelTitle = streamExtractor.uploaderName ?: "Unknown Channel",
+                    channelId = streamExtractor.uploaderUrl ?: "",
+                    streamUrl = stream.content ?: "",
+                    format = stream.format?.name ?: "AUDIO",
+                    bitrate = stream.averageBitrate,
+                    durationSeconds = streamExtractor.length,
+                    thumbnailUrl = streamExtractor.thumbnails?.firstOrNull()?.url
+                )
+            }
+
+            val videoStreams = streamExtractor.videoStreams ?: emptyList()
+            val videoOptions = videoStreams
+                .filter { !it.content.isNullOrBlank() }
+                .map { vStream ->
+                    VideoStreamOption(
+                        resolution = vStream.resolution ?: "360p",
+                        format = vStream.format?.name ?: "MP4",
+                        streamUrl = vStream.content ?: ""
+                    )
+                }
+                .distinctBy { it.resolution }
+                .sortedByDescending {
+                    it.resolution.filter { char -> char.isDigit() }.toIntOrNull() ?: 0
+                }
+
+            Result.success(
+                MediaStreamDetails(
+                    videoId = streamExtractor.id ?: videoId,
+                    title = streamExtractor.name ?: "Unknown Title",
+                    channelTitle = streamExtractor.uploaderName ?: "Unknown Channel",
+                    channelId = streamExtractor.uploaderUrl ?: "",
+                    durationSeconds = streamExtractor.length,
+                    thumbnailUrl = streamExtractor.thumbnails?.firstOrNull()?.url,
+                    audioStream = audioInfo,
+                    videoStreams = videoOptions
+                )
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }

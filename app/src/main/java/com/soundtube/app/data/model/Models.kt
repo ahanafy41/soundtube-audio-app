@@ -31,6 +31,23 @@ enum class DownloadState {
     CANCELED
 }
 
+data class VideoStreamOption(
+    val resolution: String,
+    val format: String = "MP4",
+    val streamUrl: String
+)
+
+data class MediaStreamDetails(
+    val videoId: String,
+    val title: String,
+    val channelTitle: String,
+    val channelId: String,
+    val durationSeconds: Long,
+    val thumbnailUrl: String? = null,
+    val audioStream: AudioStreamInfo? = null,
+    val videoStreams: List<VideoStreamOption> = emptyList()
+)
+
 data class DownloadItemState(
     val videoId: String,
     val title: String,
@@ -39,5 +56,7 @@ data class DownloadItemState(
     val totalBytes: Long = 0L,
     val state: DownloadState = DownloadState.PENDING,
     val localFilePath: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isVideo: Boolean = false,
+    val qualityLabel: String? = null
 )

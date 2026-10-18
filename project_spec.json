@@ -96,6 +96,41 @@
       "description": "Dedicated Compose screen and dialogs for account status, one-tap sync, CSV import/export, and logout. Strictly compliant with TalkBack and Jieshuo screen readers: explicit non-emoji contentDescription, polite liveRegion announcements for sync progress, and minimum 48dp touch targets.",
       "priority": "P0",
       "verification_criteria": "TalkBack and Jieshuo navigate effortlessly through login, sync, and CSV import flows with zero unlabeled elements and clear progress readouts."
+    },
+    {
+      "id": "REQ-011",
+      "title": "Channel Details & Uploads Screen",
+      "description": "Clicking any subscribed channel in Subscriptions tab opens its dedicated screen displaying channel title, avatar, and its latest video/audio uploads via NewPipeExtractorHelper.getChannelFeed, with immediate play and download actions.",
+      "priority": "P1",
+      "verification_criteria": "Clicking a channel opens its uploads list; audio can be played or downloaded directly; accessible back navigation returns to subscriptions list."
+    },
+    {
+      "id": "REQ-012",
+      "title": "Home Subscriptions Feed & Top Bar Search",
+      "description": "A rich landing Home screen displaying latest audio uploads from subscribed channels with quick filter chips. The top app bar features an accessible search action button opening search on demand instead of an empty screen.",
+      "priority": "P1",
+      "verification_criteria": "Landing tab displays aggregated subscription feed; top search icon opens search smoothly; zero emoji noise and complete TalkBack / Jieshuo accessibility."
+    },
+    {
+      "id": "REQ-013",
+      "title": "Clean Long-Click Video Action Menu & Custom Accessibility Actions",
+      "description": "Eliminate cramped crowded icon buttons from video list items. Tapping an item plays audio directly. Long-pressing displays an accessible action sheet (Play, Download, View Channel), paired with native Compose custom accessibility actions for seamless TalkBack and Jieshuo navigation.",
+      "priority": "P1",
+      "verification_criteria": "List items are uncluttered; double-tap plays immediately; long-click presents accessible actions modal; zero emoji noise."
+    },
+    {
+      "id": "REQ-014",
+      "title": "Multi-Quality Video and Audio Download",
+      "description": "Provide download choices for high-quality audio (M4A) and video streams (MP4 360p/720p) extracted via NewPipeExtractor, with seamless progress tracking.",
+      "priority": "P1",
+      "verification_criteria": "User can select video or audio download; MP4 or M4A downloads successfully with accurate progress."
+    },
+    {
+      "id": "REQ-015",
+      "title": "Public Storage Permissions & Dedicated SoundTube Directory",
+      "description": "Store all downloads in a user-accessible public directory (/sdcard/Download/SoundTube/). Request runtime storage and notification permissions on app launch with accessible prompts.",
+      "priority": "P0",
+      "verification_criteria": "Downloads appear in /sdcard/Download/SoundTube/; runtime permissions requested on Android; files accessible by external players."
     }
   ],
   "entry_points": {

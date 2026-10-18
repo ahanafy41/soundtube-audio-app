@@ -65,3 +65,11 @@
 - [x] Unit test TakeoutCsvParser with malformed and escaped CSV lines.
 - [ ] Execute ./gradlew test and verify Room DAO migrations.
 - [ ] Run ./gradlew assembleDebug and verify APK compilation without regressions.
+
+## Phase 12: Core Experience & Public Downloads Enhancements (REQ-011 through REQ-015)
+- [x] Configure dedicated public storage directory (/sdcard/Download/SoundTube/) and Android MediaScanner integration (REQ-015).
+- [x] Update storage, media, and notification permissions in AndroidManifest.xml and request runtime permissions in MainActivity (REQ-015).
+- [x] Implement multi-quality video download (MP4) alongside high-quality audio download (M4A) via NewPipeExtractor and AudioDownloadManager (REQ-014).
+- [x] Clean video list item cards: single tap plays immediately, long-click opens options modal sheet with Custom Accessibility Actions for TalkBack and Jieshuo (REQ-013).
+- [x] Build rich HomeScreen landing tab with subscriptions feed, quick filter chips, and refresh (REQ-012).
+- [x] Add permanent top-bar search action and channel details navigation (ChannelDetailsScreen) with dedicated uploads feed (REQ-011, REQ-012).
