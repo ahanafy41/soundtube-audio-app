@@ -119,4 +119,151 @@ class YouTubeInnerTubeClientTest {
         val token = YouTubeInnerTubeClient.extractContinuationToken(root)
         assertNull(token)
     }
+
+    @Test
+    fun parseChannelsFromJson_extractsSubscriptionListItemRenderer() {
+        val root = JSONObject("""
+            {
+                "contents": {
+                    "sectionListRenderer": {
+                        "contents": [
+                            {
+                                "itemSectionRenderer": {
+                                    "contents": [
+                                        {
+                                            "subscriptionListItemRenderer": {
+                                                "navigationEndpoint": {
+                                                    "browseEndpoint": {
+                                                        "browseId": "UC_SUB_LIST_123"
+                                                    }
+                                                },
+                                                "title": {
+                                                    "runs": [
+                                                        { "text": "Sub List Channel" }
+                                                    ]
+                                                },
+                                                "thumbnail": {
+                                                    "thumbnails": [
+                                                        { "url": "https://yt3.ggpht.com/sub_avatar.jpg" }
+                                                    ]
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        """.trimIndent())
+
+        val channels = YouTubeInnerTubeClient.parseChannelsFromJson(root)
+
+        assertEquals(1, channels.size)
+        assertEquals("UC_SUB_LIST_123", channels[0].channelId)
+        assertEquals("Sub List Channel", channels[0].channelTitle)
+        assertEquals("https://yt3.ggpht.com/sub_avatar.jpg", channels[0].avatarUrl)
+    }
+
+    @Test
+    fun parseChannelsFromJson_extractsGuideEntryRenderer() {
+        val root = JSONObject("""
+            {
+                "items": [
+                    {
+                        "guideSubscriptionsSectionRenderer": {
+                            "items": [
+                                {
+                                    "guideEntryRenderer": {
+                                        "navigationEndpoint": {
+                                            "browseEndpoint": {
+                                                "browseId": "UC_GUIDE_456"
+                                            }
+                                        },
+                                        "formattedTitle": {
+                                            "simpleText": "Guide Subscribed Channel"
+                                        },
+                                        "thumbnail": {
+                                            "thumbnails": [
+                                                { "url": "https://yt3.ggpht.com/guide_avatar.jpg" }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    "guideEntryRenderer": {
+                                        "navigationEndpoint": {
+                                            "browseEndpoint": {
+                                                "browseId": "FEwhat_to_watch"
+                                            }
+                                        },
+                                        "formattedTitle": {
+                                            "simpleText": "Home"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        """.trimIndent())
+
+        val channels = YouTubeInnerTubeClient.parseChannelsFromJson(root)
+
+        assertEquals(1, channels.size)
+        assertEquals("UC_GUIDE_456", channels[0].channelId)
+        assertEquals("Guide Subscribed Channel", channels[0].channelTitle)
+        assertEquals("https://yt3.ggpht.com/guide_avatar.jpg", channels[0].avatarUrl)
+    }
+
+    @Test
+    fun parseChannelsFromJson_extractsCompactChannelRenderer() {
+        val root = JSONObject("""
+            {
+                "compactChannelRenderer": {
+                    "channelId": "UC_COMPACT_789",
+                    "title": {
+                        "simpleText": "Compact Channel"
+                    },
+                    "thumbnail": {
+                        "thumbnails": [
+                            { "url": "https://yt3.ggpht.com/compact.jpg" }
+                        ]
+                    }
+                }
+            }
+        """.trimIndent())
+
+        val channels = YouTubeInnerTubeClient.parseChannelsFromJson(root)
+
+        assertEquals(1, channels.size)
+        assertEquals("UC_COMPACT_789", channels[0].channelId)
+        assertEquals("Compact Channel", channels[0].channelTitle)
+    }
+
+    @Test
+    fun parseChannelsFromJson_extractsCanonicalBaseUrlWhenBrowseIdMissing() {
+        val root = JSONObject("""
+            {
+                "guideEntryRenderer": {
+                    "navigationEndpoint": {
+                        "browseEndpoint": {
+                            "canonicalBaseUrl": "/@MyAwesomeChannel"
+                        }
+                    },
+                    "title": {
+                        "simpleText": "Handle Channel"
+                    }
+                }
+            }
+        """.trimIndent())
+
+        val channels = YouTubeInnerTubeClient.parseChannelsFromJson(root)
+
+        assertEquals(1, channels.size)
+        assertEquals("@MyAwesomeChannel", channels[0].channelId)
+        assertEquals("Handle Channel", channels[0].channelTitle)
+    }
 }

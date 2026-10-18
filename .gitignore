@@ -11,3 +11,4 @@
 local.properties
 .backups/
 debug_manifest.json
+build_output/

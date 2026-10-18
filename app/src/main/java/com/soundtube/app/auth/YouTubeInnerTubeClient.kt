@@ -38,14 +38,18 @@ class YouTubeInnerTubeClient(
                 val payloadJson = buildRequestBody(continuationToken)
                 val authHeader = SapisidHashGenerator.generate(sapisid)
 
+                val endpointUrl = "$BROWSE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false"
                 val request = Request.Builder()
-                    .url(BROWSE_ENDPOINT)
+                    .url(endpointUrl)
                     .post(payloadJson.toString().toRequestBody(JSON_MEDIA_TYPE))
                     .header("Content-Type", "application/json")
                     .header("User-Agent", CHROME_MOBILE_UA)
                     .header("Cookie", cookieHeader)
                     .header("Authorization", authHeader)
+                    .header("Origin", "https://www.youtube.com")
+                    .header("Referer", "https://www.youtube.com/feed/channels")
                     .header("X-Origin", "https://www.youtube.com")
+                    .header("X-Goog-AuthUser", "0")
                     .header("X-Youtube-Client-Name", "1")
                     .header("X-Youtube-Client-Version", CLIENT_VERSION)
                     .build()
@@ -86,13 +90,51 @@ class YouTubeInnerTubeClient(
 
             } while (continuationToken != null && pageCount < maxPages)
 
+            if (subscriptions.isEmpty()) {
+                fetchFallbackSubscriptions(cookieHeader, sapisid, seenChannelIds, subscriptions)
+            }
+
             Result.success(subscriptions)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    private fun buildRequestBody(continuationToken: String?): JSONObject {
+    private fun fetchFallbackSubscriptions(
+        cookieHeader: String,
+        sapisid: String,
+        seenChannelIds: MutableSet<String>,
+        subscriptions: MutableList<Subscription>
+    ) {
+        val targets = listOf(
+            "$GUIDE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false",
+            "$BROWSE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false"
+        )
+        for (targetUrl in targets) {
+            val body = buildRequestBody(null, "FEsubscriptions").toString().toRequestBody(JSON_MEDIA_TYPE)
+            val auth = SapisidHashGenerator.generate(sapisid)
+            val req = Request.Builder().url(targetUrl).post(body)
+                .header("Content-Type", "application/json").header("User-Agent", CHROME_MOBILE_UA)
+                .header("Cookie", cookieHeader).header("Authorization", auth)
+                .header("Origin", "https://www.youtube.com").header("Referer", "https://www.youtube.com/feed/channels")
+                .header("X-Origin", "https://www.youtube.com").header("X-Goog-AuthUser", "0")
+                .header("X-Youtube-Client-Name", "1").header("X-Youtube-Client-Version", CLIENT_VERSION)
+                .build()
+            try {
+                httpClient.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful && text.isNotBlank()) {
+                        for (ch in parseChannelsFromJson(JSONObject(text))) {
+                            if (ch.channelId.isNotBlank() && seenChannelIds.add(ch.channelId)) subscriptions.add(ch)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+            if (subscriptions.isNotEmpty()) break
+        }
+    }
+
+    private fun buildRequestBody(continuationToken: String?, browseId: String = "FEchannels"): JSONObject {
         val root = JSONObject()
         val context = JSONObject()
         val client = JSONObject()
@@ -106,14 +148,16 @@ class YouTubeInnerTubeClient(
         if (continuationToken != null) {
             root.put("continuation", continuationToken)
         } else {
-            root.put("browseId", "FEchannels")
+            root.put("browseId", browseId)
         }
 
         return root
     }
 
     companion object {
+        const val INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
         const val BROWSE_ENDPOINT = "https://www.youtube.com/youtubei/v1/browse"
+        const val GUIDE_ENDPOINT = "https://www.youtube.com/youtubei/v1/guide"
         const val CLIENT_VERSION = "2.20240901.01.00"
         const val CHROME_MOBILE_UA =
             "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36"
@@ -139,16 +183,14 @@ class YouTubeInnerTubeClient(
         private fun searchChannelsRecursive(value: Any?, results: MutableList<Subscription>) {
             when (value) {
                 is JSONObject -> {
-                    if (value.has("channelRenderer")) {
-                        val renderer = value.optJSONObject("channelRenderer")
-                        if (renderer != null) {
-                            parseChannelRenderer(renderer)?.let { results.add(it) }
-                        }
-                    } else if (value.has("gridChannelRenderer")) {
-                        val renderer = value.optJSONObject("gridChannelRenderer")
-                        if (renderer != null) {
-                            parseChannelRenderer(renderer)?.let { results.add(it) }
-                        }
+                    val renderer = value.optJSONObject("subscriptionListItemRenderer")
+                        ?: value.optJSONObject("channelRenderer")
+                        ?: value.optJSONObject("gridChannelRenderer")
+                        ?: value.optJSONObject("compactChannelRenderer")
+                        ?: value.optJSONObject("guideEntryRenderer")
+
+                    if (renderer != null) {
+                        parseChannelRenderer(renderer)?.let { results.add(it) }
                     }
 
                     val keys = value.keys()
@@ -166,24 +208,19 @@ class YouTubeInnerTubeClient(
         }
 
         private fun parseChannelRenderer(renderer: JSONObject): Subscription? {
-            var channelId = renderer.optString("channelId")
-            if (channelId.isBlank()) {
-                channelId = renderer.optJSONObject("navigationEndpoint")
-                    ?.optJSONObject("browseEndpoint")
-                    ?.optString("browseId")
-                    .orEmpty()
-            }
+            val browseEndpoint = renderer.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")
+            var channelId = renderer.optString("channelId").ifBlank {
+                browseEndpoint?.optString("browseId").orEmpty().ifBlank {
+                    browseEndpoint?.optString("canonicalBaseUrl")?.removePrefix("/").orEmpty()
+                }
+            }.ifBlank { renderer.optString("canonicalBaseUrl").removePrefix("/") }
 
-            if (channelId.isBlank()) return null
+            if (channelId.isBlank() || channelId.startsWith("FE") || channelId.startsWith("VL")) return null
 
-            val title = extractText(renderer.opt("title")) ?: "قناة غير معروفة"
-            val avatarUrl = extractThumbnailUrl(renderer.optJSONObject("thumbnail"))
+            val title = extractText(renderer.opt("title")) ?: extractText(renderer.opt("formattedTitle")) ?: "قناة غير معروفة"
+            val avatarUrl = extractThumbnailUrl(renderer.optJSONObject("thumbnail")) ?: extractThumbnailUrl(renderer.optJSONObject("thumbnails"))
 
-            return Subscription(
-                channelId = channelId,
-                channelTitle = title,
-                avatarUrl = avatarUrl
-            )
+            return Subscription(channelId = channelId, channelTitle = title, avatarUrl = avatarUrl)
         }
 
         private fun extractText(obj: Any?): String? {
