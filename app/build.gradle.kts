@@ -13,8 +13,8 @@ android {
         applicationId = "com.soundtube.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,8 +22,21 @@ android {
         }
     }
 
+    signingConfigs {
+        create("permanent") {
+            storeFile = file("keystore/soundtube-release-key.jks")
+            storePassword = "soundtube123"
+            keyAlias = "soundtube"
+            keyPassword = "soundtube123"
+            storeType = "PKCS12"
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("permanent")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -31,6 +44,7 @@ android {
             )
         }
         debug {
+            signingConfig = signingConfigs.getByName("permanent")
             isMinifyEnabled = false
         }
     }
