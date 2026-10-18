@@ -226,7 +226,7 @@ object NewPipeExtractorHelper {
             val items = searchExtractor.initialPage?.items ?: emptyList()
             for (item in items) {
                 if (item is StreamInfoItem) {
-                    val uploadDate = item.textualUploadDate ?: item.uploadDate?.date()?.toString()
+                    val uploadDate = item.textualUploadDate ?: item.uploadDate?.offsetDateTime()?.toString()
                     results.add(
                         VideoFeedItem(
                             videoId = item.url?.substringAfterLast("v=")?.substringBefore("&") ?: item.url ?: "",
@@ -263,7 +263,7 @@ object NewPipeExtractorHelper {
             val items = tabExtractor.initialPage?.items ?: emptyList()
             for (item in items) {
                 if (item is StreamInfoItem) {
-                    val uploadDate = item.textualUploadDate ?: item.uploadDate?.date()?.toString()
+                    val uploadDate = item.textualUploadDate ?: item.uploadDate?.offsetDateTime()?.toString()
                     results.add(
                         VideoFeedItem(
                             videoId = item.url?.substringAfterLast("v=")?.substringBefore("&") ?: item.url ?: "",
