@@ -1,6 +1,6 @@
 {
   "project_name": "SoundTube",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "track": "Track A: Desktop & Offline",
   "language": "Kotlin",
   "frameworks": [
@@ -194,6 +194,27 @@
       "description": "When signed in with Google/YouTube account, fetch InnerTube FEwhat_to_watch and FEsubscriptions endpoints in a single fast API call (<300ms) to provide genuine YouTube recommendations and watch history.",
       "priority": "P1",
       "verification_criteria": "Logged-in users see their personalized YouTube recommendations and watch history on the Home tab."
+    },
+    {
+      "id": "REQ-025",
+      "title": "Feed Loading & Channel Scraping Performance Optimization",
+      "description": "Strip redundant channelExtractor.fetchPage() calls from channel video extraction, use fast InnerTube FEsubscriptions single-call query (<300ms) for logged-in accounts, respect Room feed cache on startup (0ms cold start), and throttle concurrent local channel queries to prevent CPU/memory spikes.",
+      "priority": "P0",
+      "verification_criteria": "App cold starts in 0ms using Room cache; subscriptions feed loads in a single request (<300ms) when logged in; zero UI thread freezing or GC thrashing."
+    },
+    {
+      "id": "REQ-026",
+      "title": "Playback Latency Reduction & Stream URL In-Memory Cache",
+      "description": "Tune ExoPlayer DefaultLoadControl to start playback after 500ms of buffered audio instead of waiting for seconds. Implement in-memory StreamUrlCache with 2-hour TTL to deliver 0ms instant replay without redundant YouTube page extraction.",
+      "priority": "P0",
+      "verification_criteria": "Audio starts playing within 500ms; repeated track playback starts immediately (0ms extraction latency)."
+    },
+    {
+      "id": "REQ-027",
+      "title": "Automated Unit & Performance Test Suite with GitHub Actions CI",
+      "description": "Comprehensive automated tests in app/src/test verifying feed JSON parsing, stream caching, hash generation, and stream selection performance. Configure GitHub Actions workflow to run gradle test with detailed logging and artifact reporting.",
+      "priority": "P0",
+      "verification_criteria": "Unit and benchmark tests execute successfully on GitHub Actions CI runner with published test report artifacts."
     }
   ],
   "entry_points": {

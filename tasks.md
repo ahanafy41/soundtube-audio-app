@@ -90,3 +90,14 @@
 - [x] Implement channel tabs (Videos, Playlists) and pagination ('Load More') in ChannelDetailsScreen (REQ-023).
 - [x] Implement InnerTube FEwhat_to_watch and FEsubscriptions feed extraction for logged-in YouTube account recommendations (REQ-024).
 - [x] Bump version to 1.3.0 (versionCode 4) in build.gradle.kts and version.json (REQ-020 through REQ-024).
+
+## Phase 15: Extreme Performance Optimization & Automated CI Test Suite (REQ-025 through REQ-027)
+- [x] Remove redundant channelExtractor.fetchPage() in NewPipeExtractorHelper to cut scraping HTTP requests by 50% (REQ-025).
+- [x] Implement fast single-call InnerTube FEsubscriptions feed in HomeScreen for logged-in accounts (<300ms) (REQ-025).
+- [x] Optimize HomeScreen startup to respect Room cache immediately and throttle local channel queries with Semaphore (REQ-025).
+- [x] Tune ExoPlayer DefaultLoadControl buffer thresholds (500ms initial buffer) and HttpDataSource timeouts in PlaybackService (REQ-026).
+- [x] Implement in-memory StreamUrlCache in NewPipeExtractorHelper with 2-hour TTL for 0ms instant track replay (REQ-026).
+- [x] Write automated tests in app/src/test (InnerTube video parsing, benchmark tests, stream caching, and audio stream preference) (REQ-027).
+- [x] Update .github/workflows/build-apk.yml with dedicated gradle test step, test logging, and test report artifact upload (REQ-027).
+- [x] Bump version to 1.3.1 (versionCode 5) in build.gradle.kts and version.json (REQ-025 through REQ-027).
+

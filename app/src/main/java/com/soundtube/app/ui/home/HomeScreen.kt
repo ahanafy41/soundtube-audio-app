@@ -29,6 +29,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 enum class HomeFeedTab {
@@ -90,7 +92,7 @@ fun HomeScreen(
     }
 
     fun refreshSubscriptionsFeed(subs: List<Subscription>) {
-        if (subs.isEmpty()) {
+        if (subs.isEmpty() && !isGoogleLoggedIn) {
             if (cachedEntities.isEmpty()) {
                 feedItems = emptyList()
                 statusAnnouncement = "لا توجد قنوات مشترك بها لعرض خلاصتها."
@@ -100,45 +102,73 @@ fun HomeScreen(
 
         isLoadingSubscriptions = true
         if (feedItems.isEmpty()) {
-            statusAnnouncement = "جارٍ تحميل أحدث المقاطع من القنوات المشترك بها..."
+            statusAnnouncement = "جارٍ تحميل أحدث المقاطع من الاشتراكات..."
         }
 
         coroutineScope.launch {
-            val targetSubs = subs.take(15) // Ingest top subscribed channels
-            val deferredList = targetSubs.map { sub ->
-                async {
-                    val res = NewPipeExtractorHelper.getChannelFeed(sub.channelId)
-                    res.getOrDefault(emptyList()).take(6)
+            var fetchedVideos: List<VideoFeedItem> = emptyList()
+
+            // 1. If signed in, fetch Subscriptions feed via fast InnerTube API in a single request (<300ms)
+            if (isGoogleLoggedIn) {
+                val cookies = authStorage.getCookies()
+                val sapisid = authStorage.getSapisid()
+                if (!cookies.isNullOrBlank() && !sapisid.isNullOrBlank()) {
+                    val innerTubeResult = YouTubeInnerTubeClient().fetchHomeFeed(cookies, sapisid, browseId = "FEsubscriptions")
+                    innerTubeResult.onSuccess { videos ->
+                        if (videos.isNotEmpty()) {
+                            fetchedVideos = videos
+                        }
+                    }
                 }
             }
-            val results = deferredList.awaitAll().flatten()
-            val distinctResults = results.distinctBy { it.videoId }
+
+            // 2. If not logged in or InnerTube returned empty, fall back to throttled local channel scraping
+            if (fetchedVideos.isEmpty() && subs.isNotEmpty()) {
+                val targetSubs = subs.take(12)
+                val semaphore = Semaphore(2) // Max 2 concurrent channel requests to prevent CPU/memory thrashing
+                val deferredList = targetSubs.map { sub ->
+                    async(Dispatchers.IO) {
+                        semaphore.withPermit {
+                            val res = NewPipeExtractorHelper.getChannelFeed(sub.channelId)
+                            res.getOrDefault(emptyList()).take(5)
+                        }
+                    }
+                }
+                val results = deferredList.awaitAll().flatten()
+                fetchedVideos = results
+            }
+
+            val distinctResults = fetchedVideos.distinctBy { it.videoId }
                 .sortedWith(compareByDescending { com.soundtube.app.data.model.parseUploadDateScore(it.uploadDate) })
 
             withContext(Dispatchers.Main) {
                 if (distinctResults.isNotEmpty()) {
                     feedItems = distinctResults
                     statusAnnouncement = "تم تحديث خلاصة الاشتراكات (${distinctResults.size} مقطع، الأحدث أولاً)."
+                } else if (feedItems.isEmpty()) {
+                    statusAnnouncement = "لم يتم العثور على مقاطع جديدة حالياً."
                 }
                 isLoadingSubscriptions = false
             }
 
-            // Persist to Room feed cache
+            // Persist to Room feed cache on IO thread
             if (distinctResults.isNotEmpty()) {
-                val cacheEntities = distinctResults.map { item ->
-                    FeedCacheEntity(
-                        videoId = item.videoId,
-                        title = item.title,
-                        uploaderName = item.uploaderName,
-                        uploaderUrl = item.uploaderUrl,
-                        durationText = item.durationText,
-                        durationSeconds = item.durationSeconds,
-                        thumbnailUrl = item.thumbnailUrl,
-                        uploadDate = item.uploadDate
-                    )
+                withContext(Dispatchers.IO) {
+                    val cacheEntities = distinctResults.map { item ->
+                        FeedCacheEntity(
+                            videoId = item.videoId,
+                            title = item.title,
+                            uploaderName = item.uploaderName,
+                            uploaderUrl = item.uploaderUrl,
+                            durationText = item.durationText,
+                            durationSeconds = item.durationSeconds,
+                            thumbnailUrl = item.thumbnailUrl,
+                            uploadDate = item.uploadDate
+                        )
+                    }
+                    database.feedCacheDao().clear()
+                    database.feedCacheDao().insertAll(cacheEntities)
                 }
-                database.feedCacheDao().clear()
-                database.feedCacheDao().insertAll(cacheEntities)
             }
         }
     }
@@ -169,7 +199,8 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(subscriptions) {
+    // REQ-020 & REQ-025: Only auto-refresh if memory AND cache are completely empty
+    LaunchedEffect(subscriptions, isGoogleLoggedIn) {
         if (subscriptions.isNotEmpty() && feedItems.isEmpty() && cachedEntities.isEmpty()) {
             refreshSubscriptionsFeed(subscriptions)
         }

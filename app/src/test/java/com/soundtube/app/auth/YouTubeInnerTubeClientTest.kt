@@ -266,4 +266,147 @@ class YouTubeInnerTubeClientTest {
         assertEquals("@MyAwesomeChannel", channels[0].channelId)
         assertEquals("Handle Channel", channels[0].channelTitle)
     }
+
+    @Test
+    fun parseVideosFromJson_extractsVideoRenderer() {
+        val root = JSONObject("""
+            {
+                "contents": {
+                    "twoColumnBrowseResultsRenderer": {
+                        "tabs": [
+                            {
+                                "tabRenderer": {
+                                    "content": {
+                                        "richGridRenderer": {
+                                            "contents": [
+                                                {
+                                                    "richItemRenderer": {
+                                                        "content": {
+                                                            "videoRenderer": {
+                                                                "videoId": "TEST_VID_001",
+                                                                "title": {
+                                                                    "runs": [
+                                                                        { "text": "درس تاريخي شيق" }
+                                                                    ]
+                                                                },
+                                                                "shortBylineText": {
+                                                                    "runs": [
+                                                                        {
+                                                                            "text": "قناة التاريخ والآداب",
+                                                                            "navigationEndpoint": {
+                                                                                "browseEndpoint": {
+                                                                                    "browseId": "UC_HISTORY_123"
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                "lengthText": {
+                                                                    "simpleText": "14:25"
+                                                                },
+                                                                "publishedTimeText": {
+                                                                    "simpleText": "منذ يومين"
+                                                                },
+                                                                "thumbnail": {
+                                                                    "thumbnails": [
+                                                                        { "url": "https://i.ytimg.com/vi/TEST_VID_001/hqdefault.jpg" }
+                                                                    ]
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        """.trimIndent())
+
+        val videos = YouTubeInnerTubeClient.parseVideosFromJson(root)
+
+        assertEquals(1, videos.size)
+        val v = videos[0]
+        assertEquals("TEST_VID_001", v.videoId)
+        assertEquals("درس تاريخي شيق", v.title)
+        assertEquals("قناة التاريخ والآداب", v.uploaderName)
+        assertEquals("UC_HISTORY_123", v.uploaderUrl)
+        assertEquals("14:25", v.durationText)
+        assertEquals(14 * 60 + 25L, v.durationSeconds)
+        assertEquals("منذ يومين", v.uploadDate)
+        assertEquals("https://i.ytimg.com/vi/TEST_VID_001/hqdefault.jpg", v.thumbnailUrl)
+    }
+
+    @Test
+    fun parseVideosFromJson_extractsCompactAndGridVideoRenderer() {
+        val root = JSONObject("""
+            {
+                "contents": [
+                    {
+                        "compactVideoRenderer": {
+                            "videoId": "COMPACT_01",
+                            "title": { "simpleText": "Compact Audio" },
+                            "ownerText": { "runs": [{ "text": "Voice Channel" }] },
+                            "lengthText": { "simpleText": "03:10" }
+                        }
+                    },
+                    {
+                        "gridVideoRenderer": {
+                            "videoId": "GRID_02",
+                            "title": { "simpleText": "Grid Lecture" },
+                            "shortBylineText": { "simpleText": "Lectures Channel" },
+                            "lengthText": { "simpleText": "01:05:00" }
+                        }
+                    }
+                ]
+            }
+        """.trimIndent())
+
+        val videos = YouTubeInnerTubeClient.parseVideosFromJson(root)
+
+        assertEquals(2, videos.size)
+        assertEquals("COMPACT_01", videos[0].videoId)
+        assertEquals("Compact Audio", videos[0].title)
+        assertEquals(190L, videos[0].durationSeconds)
+
+        assertEquals("GRID_02", videos[1].videoId)
+        assertEquals("Grid Lecture", videos[1].title)
+        assertEquals(3900L, videos[1].durationSeconds)
+    }
+
+    @Test
+    fun parseVideosFromJson_performance_benchmark() {
+        val array = JSONArray()
+        for (i in 1..50) {
+            val video = JSONObject()
+            video.put("videoId", "BENCH_VID_$i")
+            val titleObj = JSONObject()
+            titleObj.put("simpleText", "Benchmark Video Item #$i")
+            video.put("title", titleObj)
+            val bylineObj = JSONObject()
+            bylineObj.put("simpleText", "Benchmark Creator")
+            video.put("shortBylineText", bylineObj)
+            val lenObj = JSONObject()
+            lenObj.put("simpleText", "10:00")
+            video.put("lengthText", lenObj)
+
+            val container = JSONObject()
+            container.put("videoRenderer", video)
+            array.put(container)
+        }
+        val root = JSONObject()
+        root.put("items", array)
+
+        val startTime = System.currentTimeMillis()
+        val parsed = YouTubeInnerTubeClient.parseVideosFromJson(root)
+        val elapsed = System.currentTimeMillis() - startTime
+
+        assertEquals(50, parsed.size)
+        // Parsing 50 videos in-memory should take less than 150ms
+        org.junit.Assert.assertTrue("Parsing 50 videos took $elapsed ms (expected < 150ms)", elapsed < 150)
+    }
 }

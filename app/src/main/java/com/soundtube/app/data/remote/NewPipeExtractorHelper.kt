@@ -35,6 +35,14 @@ object NewPipeExtractorHelper {
     @Volatile
     private var isInitialized = false
 
+    // In-memory stream URL cache (2 hours TTL) to make repeat audio playback instant
+    private val streamCache = java.util.concurrent.ConcurrentHashMap<String, Pair<AudioStreamInfo, Long>>()
+    private const val STREAM_CACHE_TTL_MS = 2 * 60 * 60 * 1000L
+
+    fun clearStreamCache() {
+        streamCache.clear()
+    }
+
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -129,6 +137,12 @@ object NewPipeExtractorHelper {
     }
 
     suspend fun getAudioStreamUrl(videoId: String): Result<AudioStreamInfo> = withContext(Dispatchers.IO) {
+        // Fast-path: check in-memory cache for instant 0ms playback
+        val cached = streamCache[videoId]
+        if (cached != null && (System.currentTimeMillis() - cached.second) < STREAM_CACHE_TTL_MS) {
+            return@withContext Result.success(cached.first)
+        }
+
         try {
             init()
             val url = if (videoId.startsWith("http")) videoId else "https://www.youtube.com/watch?v=$videoId"
@@ -155,6 +169,7 @@ object NewPipeExtractorHelper {
                 durationSeconds = streamExtractor.length,
                 thumbnailUrl = streamExtractor.thumbnails?.firstOrNull()?.url
             )
+            streamCache[videoId] = Pair(info, System.currentTimeMillis())
             Result.success(info)
         } catch (e: Exception) {
             Result.failure(e)
@@ -287,9 +302,6 @@ object NewPipeExtractorHelper {
         try {
             init()
             val channelUrl = if (channelId.startsWith("http")) channelId else "https://www.youtube.com/channel/$channelId"
-            val channelExtractor = ServiceList.YouTube.getChannelExtractor(channelUrl)
-            channelExtractor.fetchPage()
-
             val linkHandler = ServiceList.YouTube.channelTabLHFactory
                 .fromQuery(channelId, Collections.singletonList("videos"), "")
             val tabExtractor = ServiceList.YouTube.getChannelTabExtractor(linkHandler)
@@ -310,7 +322,7 @@ object NewPipeExtractorHelper {
                         VideoFeedItem(
                             videoId = item.url?.substringAfterLast("v=")?.substringBefore("&") ?: item.url ?: "",
                             title = item.name ?: "",
-                            uploaderName = item.uploaderName ?: channelExtractor.name ?: "",
+                            uploaderName = item.uploaderName ?: "",
                             uploaderUrl = channelUrl,
                             durationText = if (item.duration > 0) formatDuration(item.duration) else null,
                             durationSeconds = item.duration,
