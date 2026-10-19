@@ -1,6 +1,7 @@
 package com.soundtube.app.auth
 
 import com.soundtube.app.data.local.Subscription
+import com.soundtube.app.data.model.VideoFeedItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -19,6 +20,56 @@ import java.util.concurrent.TimeUnit
 class YouTubeInnerTubeClient(
     private val httpClient: OkHttpClient = defaultHttpClient()
 ) {
+
+    suspend fun fetchHomeFeed(
+        cookieHeader: String,
+        sapisid: String,
+        browseId: String = "FEwhat_to_watch"
+    ): Result<List<VideoFeedItem>> = withContext(Dispatchers.IO) {
+        try {
+            val payloadJson = buildRequestBody(null, browseId)
+            val authHeader = SapisidHashGenerator.generate(sapisid)
+            val endpointUrl = "$BROWSE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false"
+
+            val request = Request.Builder()
+                .url(endpointUrl)
+                .post(payloadJson.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .header("Content-Type", "application/json")
+                .header("User-Agent", CHROME_MOBILE_UA)
+                .header("Cookie", cookieHeader)
+                .header("Authorization", authHeader)
+                .header("Origin", "https://www.youtube.com")
+                .header("Referer", "https://www.youtube.com/")
+                .header("X-Origin", "https://www.youtube.com")
+                .header("X-Goog-AuthUser", "0")
+                .header("X-Youtube-Client-Name", "1")
+                .header("X-Youtube-Client-Version", CLIENT_VERSION)
+                .build()
+
+            val response = httpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                val code = response.code
+                val errorBody = response.body?.string().orEmpty()
+                response.close()
+                return@withContext Result.failure(
+                    IOException("فشل جلب خلاصة المقترحات: كود $code - $errorBody")
+                )
+            }
+
+            val responseText = response.body?.string().orEmpty()
+            response.close()
+
+            if (responseText.isBlank()) {
+                return@withContext Result.success(emptyList())
+            }
+
+            val jsonResponse = JSONObject(responseText)
+            val videos = parseVideosFromJson(jsonResponse)
+            Result.success(videos)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     suspend fun fetchAllSubscriptions(
         cookieHeader: String,
@@ -291,6 +342,90 @@ class YouTubeInnerTubeClient(
                 }
             }
             return null
+        }
+
+        fun parseVideosFromJson(root: JSONObject): List<VideoFeedItem> {
+            val videos = mutableListOf<VideoFeedItem>()
+            val seenIds = mutableSetOf<String>()
+            searchVideosRecursive(root, videos, seenIds)
+            return videos
+        }
+
+        private fun searchVideosRecursive(value: Any?, results: MutableList<VideoFeedItem>, seenIds: MutableSet<String>) {
+            when (value) {
+                is JSONObject -> {
+                    val renderer = value.optJSONObject("videoRenderer")
+                        ?: value.optJSONObject("compactVideoRenderer")
+                        ?: value.optJSONObject("gridVideoRenderer")
+
+                    if (renderer != null) {
+                        parseVideoRenderer(renderer)?.let { video ->
+                            if (video.videoId.isNotBlank() && seenIds.add(video.videoId)) {
+                                results.add(video)
+                            }
+                        }
+                    }
+
+                    val keys = value.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        searchVideosRecursive(value.opt(key), results, seenIds)
+                    }
+                }
+                is JSONArray -> {
+                    for (i in 0 until value.length()) {
+                        searchVideosRecursive(value.opt(i), results, seenIds)
+                    }
+                }
+            }
+        }
+
+        private fun parseVideoRenderer(renderer: JSONObject): VideoFeedItem? {
+            val videoId = renderer.optString("videoId")
+            if (videoId.isBlank()) return null
+
+            val title = extractText(renderer.opt("title")) ?: "مقطع بدون عنوان"
+            val uploaderName = extractText(renderer.opt("shortBylineText"))
+                ?: extractText(renderer.opt("ownerText"))
+                ?: extractText(renderer.opt("longBylineText"))
+                ?: "يوتيوب"
+
+            val browseEndpoint = renderer.optJSONObject("shortBylineText")
+                ?.optJSONArray("runs")?.optJSONObject(0)
+                ?.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")
+                ?: renderer.optJSONObject("ownerText")
+                ?.optJSONArray("runs")?.optJSONObject(0)
+                ?.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")
+                ?: renderer.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")
+            val uploaderUrl = browseEndpoint?.optString("browseId")?.ifBlank { null }
+                ?: browseEndpoint?.optString("canonicalBaseUrl")?.ifBlank { null }
+
+            val durationText = extractText(renderer.opt("lengthText"))
+            val durationSeconds = parseDurationToSeconds(durationText)
+            val uploadDate = extractText(renderer.opt("publishedTimeText"))
+            val thumbnailUrl = extractThumbnailUrl(renderer.optJSONObject("thumbnail"))
+
+            return VideoFeedItem(
+                videoId = videoId,
+                title = title,
+                uploaderName = uploaderName,
+                uploaderUrl = uploaderUrl,
+                durationText = durationText,
+                durationSeconds = durationSeconds,
+                thumbnailUrl = thumbnailUrl,
+                uploadDate = uploadDate
+            )
+        }
+
+        private fun parseDurationToSeconds(durationText: String?): Long {
+            if (durationText.isNullOrBlank()) return 0L
+            val parts = durationText.trim().split(":")
+            return when (parts.size) {
+                1 -> parts[0].toLongOrNull() ?: 0L
+                2 -> (parts[0].toLongOrNull() ?: 0L) * 60 + (parts[1].toLongOrNull() ?: 0L)
+                3 -> (parts[0].toLongOrNull() ?: 0L) * 3600 + (parts[1].toLongOrNull() ?: 0L) * 60 + (parts[2].toLongOrNull() ?: 0L)
+                else -> 0L
+            }
         }
     }
 }

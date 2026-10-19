@@ -6,14 +6,15 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [PlaybackHistory::class, Subscription::class, DownloadRecord::class],
-    version = 1,
+    entities = [PlaybackHistory::class, Subscription::class, DownloadRecord::class, FeedCacheEntity::class],
+    version = 2,
     exportSchema = false
 )
 abstract class SoundTubeDatabase : RoomDatabase() {
     abstract fun playbackHistoryDao(): PlaybackHistoryDao
     abstract fun subscriptionDao(): SubscriptionDao
     abstract fun downloadRecordDao(): DownloadRecordDao
+    abstract fun feedCacheDao(): FeedCacheDao
 
     companion object {
         @Volatile

@@ -2,16 +2,20 @@ package com.soundtube.app.data.remote
 
 import com.soundtube.app.data.model.AudioStreamInfo
 import com.soundtube.app.data.model.MediaStreamDetails
+import com.soundtube.app.data.model.PlaylistFeedItem
 import com.soundtube.app.data.model.VideoFeedItem
 import com.soundtube.app.data.model.VideoStreamOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.Page
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.channel.ChannelExtractor
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
+import org.schabi.newpipe.extractor.localization.Localization
+import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
 import org.schabi.newpipe.extractor.search.SearchExtractor
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeChannelLinkHandlerFactory
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
@@ -40,7 +44,7 @@ object NewPipeExtractorHelper {
         if (isInitialized) return
         synchronized(this) {
             if (isInitialized) return
-            NewPipe.init(object : Downloader() {
+            val downloader = object : Downloader() {
                 override fun execute(request: Request): Response {
                     val httpMethod = request.httpMethod()
                     val url = request.url()
@@ -58,6 +62,7 @@ object NewPipeExtractorHelper {
                     if (!hasUserAgent) {
                         reqBuilder.addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
                     }
+                    reqBuilder.header("Accept-Language", "ar, ar-EG;q=0.9, en;q=0.8")
 
                     when (httpMethod) {
                         "GET" -> reqBuilder.get()
@@ -87,9 +92,40 @@ object NewPipeExtractorHelper {
                         response.request.url.toString()
                     )
                 }
-            })
+            }
+            NewPipe.init(downloader, Localization("ar", "EG"))
             isInitialized = true
         }
+    }
+
+    fun selectPreferredAudioStream(audioStreams: List<AudioStream>): AudioStream? {
+        if (audioStreams.isEmpty()) return null
+
+        // 1. First priority: Arabic tracks (audioLocale language == "ar")
+        val arabicStreams = audioStreams.filter { stream ->
+            stream.audioLocale?.language?.contains("ar", ignoreCase = true) == true
+        }
+        if (arabicStreams.isNotEmpty()) {
+            val sorted = arabicStreams.sortedByDescending { it.averageBitrate }
+            return sorted.firstOrNull { it.format?.name.equals("M4A", ignoreCase = true) } ?: sorted.first()
+        }
+
+        // 2. Second priority: Original audio tracks
+        val originalStreams = audioStreams.filter { stream ->
+            stream.audioTrackType?.name.equals("ORIGINAL", ignoreCase = true)
+        }
+        if (originalStreams.isNotEmpty()) {
+            val sorted = originalStreams.sortedByDescending { it.averageBitrate }
+            return sorted.firstOrNull { it.format?.name.equals("M4A", ignoreCase = true) } ?: sorted.first()
+        }
+
+        // 3. Fallback: streams that are NOT dubbed
+        val nonDubbed = audioStreams.filter { stream ->
+            !stream.audioTrackType?.name.equals("DUBBED", ignoreCase = true)
+        }
+        val candidateStreams = if (nonDubbed.isNotEmpty()) nonDubbed else audioStreams
+        val sortedCandidates = candidateStreams.sortedByDescending { it.averageBitrate }
+        return sortedCandidates.firstOrNull { it.format?.name.equals("M4A", ignoreCase = true) } ?: sortedCandidates.first()
     }
 
     suspend fun getAudioStreamUrl(videoId: String): Result<AudioStreamInfo> = withContext(Dispatchers.IO) {
@@ -104,10 +140,9 @@ object NewPipeExtractorHelper {
                 return@withContext Result.failure(IOException("No audio streams found for video: $videoId"))
             }
 
-            // Pick best bitrate stream (prefer m4a or opus)
-            val sortedStreams = audioStreams.sortedByDescending { it.averageBitrate }
-            val chosenStream: AudioStream = sortedStreams.firstOrNull { it.format?.name.equals("M4A", ignoreCase = true) }
-                ?: sortedStreams.first()
+            // Prefer Arabic or Original audio track over random/highest bitrate
+            val chosenStream: AudioStream = selectPreferredAudioStream(audioStreams)
+                ?: return@withContext Result.failure(IOException("No suitable audio stream found for video: $videoId"))
 
             val info = AudioStreamInfo(
                 videoId = streamExtractor.id ?: videoId,
@@ -162,9 +197,7 @@ object NewPipeExtractorHelper {
             streamExtractor.fetchPage()
 
             val audioStreams = streamExtractor.audioStreams ?: emptyList()
-            val sortedAudio = audioStreams.sortedByDescending { it.averageBitrate }
-            val chosenAudio: AudioStream? = sortedAudio.firstOrNull { it.format?.name.equals("M4A", ignoreCase = true) }
-                ?: sortedAudio.firstOrNull()
+            val chosenAudio: AudioStream? = selectPreferredAudioStream(audioStreams)
 
             val audioInfo = chosenAudio?.let { stream ->
                 AudioStreamInfo(
@@ -247,20 +280,29 @@ object NewPipeExtractorHelper {
         }
     }
 
-    suspend fun getChannelFeed(channelId: String): Result<List<VideoFeedItem>> = withContext(Dispatchers.IO) {
+    suspend fun getChannelFeedWithPage(
+        channelId: String,
+        page: Page? = null
+    ): Result<Pair<List<VideoFeedItem>, Page?>> = withContext(Dispatchers.IO) {
         try {
             init()
             val channelUrl = if (channelId.startsWith("http")) channelId else "https://www.youtube.com/channel/$channelId"
             val channelExtractor = ServiceList.YouTube.getChannelExtractor(channelUrl)
             channelExtractor.fetchPage()
 
-            val results = mutableListOf<VideoFeedItem>()
             val linkHandler = ServiceList.YouTube.channelTabLHFactory
                 .fromQuery(channelId, Collections.singletonList("videos"), "")
             val tabExtractor = ServiceList.YouTube.getChannelTabExtractor(linkHandler)
-            tabExtractor.fetchPage()
 
-            val items = tabExtractor.initialPage?.items ?: emptyList()
+            val (items, nextPage) = if (page == null) {
+                tabExtractor.fetchPage()
+                Pair(tabExtractor.initialPage?.items ?: emptyList(), tabExtractor.initialPage?.nextPage)
+            } else {
+                val pageResult = tabExtractor.getPage(page)
+                Pair(pageResult?.items ?: emptyList(), pageResult?.nextPage)
+            }
+
+            val results = mutableListOf<VideoFeedItem>()
             for (item in items) {
                 if (item is StreamInfoItem) {
                     val uploadDate = item.textualUploadDate ?: item.uploadDate?.offsetDateTime()?.toString()
@@ -274,6 +316,40 @@ object NewPipeExtractorHelper {
                             durationSeconds = item.duration,
                             thumbnailUrl = item.thumbnails?.firstOrNull()?.url,
                             uploadDate = uploadDate
+                        )
+                    )
+                }
+            }
+            Result.success(Pair(results, nextPage))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getChannelFeed(channelId: String): Result<List<VideoFeedItem>> {
+        return getChannelFeedWithPage(channelId, null).map { it.first }
+    }
+
+    suspend fun getChannelPlaylists(channelId: String): Result<List<PlaylistFeedItem>> = withContext(Dispatchers.IO) {
+        try {
+            init()
+            val linkHandler = ServiceList.YouTube.channelTabLHFactory
+                .fromQuery(channelId, Collections.singletonList("playlists"), "")
+            val tabExtractor = ServiceList.YouTube.getChannelTabExtractor(linkHandler)
+            tabExtractor.fetchPage()
+
+            val results = mutableListOf<PlaylistFeedItem>()
+            val items = tabExtractor.initialPage?.items ?: emptyList()
+            for (item in items) {
+                if (item is PlaylistInfoItem) {
+                    val playlistId = item.url?.substringAfter("list=")?.substringBefore("&") ?: item.url ?: ""
+                    results.add(
+                        PlaylistFeedItem(
+                            playlistId = playlistId,
+                            title = item.name ?: "قائمة تشغيل",
+                            uploaderName = item.uploaderName ?: "",
+                            videoCount = item.streamCount,
+                            thumbnailUrl = item.thumbnails?.firstOrNull()?.url
                         )
                     )
                 }

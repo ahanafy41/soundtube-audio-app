@@ -82,3 +82,11 @@
 - [x] Add startup update prompt dialog and manual "التحقق من وجود تحديثات" button in AccountSyncScreen/MainActivity (REQ-018).
 - [x] Create version.json in repository root and configure GitHub Actions workflow for automatic Release publishing on push to main (REQ-019).
 - [x] Bump version to 1.2.0 (versionCode 3) in build.gradle.kts and verify compilation (REQ-018, REQ-019).
+
+## Phase 14: Performance, Arabic Priority, Resumption, Channel Tabs & Account Feeds (REQ-020 through REQ-024)
+- [x] Implement Room FeedCacheEntity, FeedCacheDao, and database version 2 migration for instant 0ms startup (REQ-020).
+- [x] Configure NewPipe Arabic localization (ar-EG), Accept-Language header, and prefer Arabic/Original audio streams over dubs (REQ-021).
+- [x] Fix playback resumption using controller.setMediaItem(mediaItem, startPositionMs) and TalkBack speech feedback (REQ-022).
+- [x] Implement channel tabs (Videos, Playlists) and pagination ('Load More') in ChannelDetailsScreen (REQ-023).
+- [x] Implement InnerTube FEwhat_to_watch and FEsubscriptions feed extraction for logged-in YouTube account recommendations (REQ-024).
+- [x] Bump version to 1.3.0 (versionCode 4) in build.gradle.kts and version.json (REQ-020 through REQ-024).

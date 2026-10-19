@@ -1,6 +1,6 @@
 {
   "project_name": "SoundTube",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "track": "Track A: Desktop & Offline",
   "language": "Kotlin",
   "frameworks": [
@@ -159,6 +159,41 @@
       "description": "Configure GitHub Actions workflow to publish verified signed APK as a GitHub Release (tag 'latest' and version tag) upon push to main, maintaining permanent keystore signature.",
       "priority": "P1",
       "verification_criteria": "GitHub Actions automatically generates release with signed APK; version.json matches release tag."
+    },
+    {
+      "id": "REQ-020",
+      "title": "Feed Caching & Instant 0ms Startup",
+      "description": "Persist home feed items in Room database (feed_cache). On app launch, display cached feed instantly with zero network delay, while triggering a quiet background refresh without UI blocking.",
+      "priority": "P0",
+      "verification_criteria": "App launch displays cached videos in <500ms; zero UI freezes or network starvation."
+    },
+    {
+      "id": "REQ-021",
+      "title": "Arabic Localization & Multi-Track Dubbing Priority",
+      "description": "Configure NewPipe with Arabic localization (ar-EG) and explicit Accept-Language header. In audio stream selection, prefer Arabic and Original audio tracks over English or secondary dubs.",
+      "priority": "P0",
+      "verification_criteria": "Video titles and audio tracks default to Arabic / Original audio; zero unexpected English dubbing on Arabic/original media."
+    },
+    {
+      "id": "REQ-022",
+      "title": "Reliable Playback Resumption",
+      "description": "Restore saved playback timestamp directly via controller.setMediaItem(mediaItem, startPositionMs) before playback preparation, with clear TalkBack / Jieshuo speech confirmation of the resumed minute/second.",
+      "priority": "P0",
+      "verification_criteria": "Closing and reopening a video resumes playback seamlessly from exact timestamp; screen reader announces resumption point."
+    },
+    {
+      "id": "REQ-023",
+      "title": "Channel Tabs (Videos & Playlists) with Accessible Pagination",
+      "description": "Organize channel details into standard YouTube tabs (Videos, Playlists) with accessible TabRow and an explicit 'Load More' button for progressive loading of the full channel catalog.",
+      "priority": "P1",
+      "verification_criteria": "Channel screen shows Videos and Playlists tabs; clicking Load More loads subsequent pages smoothly."
+    },
+    {
+      "id": "REQ-024",
+      "title": "YouTube Account Home Recommendations & Subscriptions Feed",
+      "description": "When signed in with Google/YouTube account, fetch InnerTube FEwhat_to_watch and FEsubscriptions endpoints in a single fast API call (<300ms) to provide genuine YouTube recommendations and watch history.",
+      "priority": "P1",
+      "verification_criteria": "Logged-in users see their personalized YouTube recommendations and watch history on the Home tab."
     }
   ],
   "entry_points": {

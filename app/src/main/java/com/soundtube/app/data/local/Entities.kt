@@ -38,3 +38,16 @@ data class DownloadRecord(
 )
 
 typealias DownloadRecordEntity = DownloadRecord
+
+@Entity(tableName = "feed_cache")
+data class FeedCacheEntity(
+    @PrimaryKey val videoId: String,
+    val title: String,
+    val uploaderName: String,
+    val uploaderUrl: String? = null,
+    val durationText: String? = null,
+    val durationSeconds: Long = 0L,
+    val thumbnailUrl: String? = null,
+    val uploadDate: String? = null,
+    val cachedAt: Long = System.currentTimeMillis()
+)

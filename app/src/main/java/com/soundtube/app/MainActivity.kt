@@ -115,9 +115,15 @@ class MainActivity : ComponentActivity() {
         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
             val savedPos = db.playbackHistoryDao().getPlaybackPosition(info.videoId) ?: 0L
             withContext(Dispatchers.Main) {
-                controller.setMediaItem(mediaItem)
-                if (savedPos > 0) {
-                    controller.seekTo(savedPos)
+                if (savedPos > 3000L) {
+                    controller.setMediaItem(mediaItem, savedPos)
+                    val totalSec = savedPos / 1000L
+                    val mins = totalSec / 60L
+                    val secs = totalSec % 60L
+                    val formattedTime = "%d:%02d".format(mins, secs)
+                    Toast.makeText(this@MainActivity, "استئناف الاستماع من الدقيقة $formattedTime", Toast.LENGTH_SHORT).show()
+                } else {
+                    controller.setMediaItem(mediaItem)
                 }
                 controller.prepare()
                 controller.play()

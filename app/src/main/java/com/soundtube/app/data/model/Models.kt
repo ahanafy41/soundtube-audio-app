@@ -104,3 +104,11 @@ data class DownloadItemState(
     val isVideo: Boolean = false,
     val qualityLabel: String? = null
 )
+
+data class PlaylistFeedItem(
+    val playlistId: String,
+    val title: String,
+    val uploaderName: String,
+    val videoCount: Long = 0L,
+    val thumbnailUrl: String? = null
+)

@@ -40,7 +40,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         tag_name: latest
-        name: "SoundTube v1.2.0"
+        name: "SoundTube v1.3.0"
         draft: false
         prerelease: false
         files: app/build/outputs/apk/debug/*.apk
