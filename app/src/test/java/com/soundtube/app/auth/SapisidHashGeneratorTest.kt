@@ -65,7 +65,8 @@ class SapisidHashGeneratorTest {
         )
 
         assertNotNull(result)
-        assertEquals("SAPISIDHASH 1690000000_325d586362bf321ac733123c1349f1727a88909c", result)
+        assertTrue(result!!.contains("SAPISIDHASH 1690000000_325d586362bf321ac733123c1349f1727a88909c"))
+        assertTrue(result.contains("SAPISID3PHASH 1690000000_325d586362bf321ac733123c1349f1727a88909c"))
     }
 
     @Test

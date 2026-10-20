@@ -268,6 +268,46 @@ class YouTubeInnerTubeClientTest {
     }
 
     @Test
+    fun parseChannelsFromJson_ignoresSystemTopicChannels() {
+        val root = JSONObject("""
+            {
+                "items": [
+                    {
+                        "channelRenderer": {
+                            "channelId": "UC-9-kyTW8ZkZNDHQJ6FgpwQ",
+                            "title": { "simpleText": "YouTube Music" }
+                        }
+                    },
+                    {
+                        "channelRenderer": {
+                            "channelId": "UCOpNcN46UbXVtpKMrmU4Abg",
+                            "title": { "simpleText": "YouTube Gaming" }
+                        }
+                    },
+                    {
+                        "channelRenderer": {
+                            "channelId": "UCEgdi0XIXXZ-qJOFPf4JSKw",
+                            "title": { "simpleText": "YouTube Sports" }
+                        }
+                    },
+                    {
+                        "channelRenderer": {
+                            "channelId": "UC_REAL_USER_SUB",
+                            "title": { "simpleText": "Actual User Channel" }
+                        }
+                    }
+                ]
+            }
+        """.trimIndent())
+
+        val channels = YouTubeInnerTubeClient.parseChannelsFromJson(root)
+
+        assertEquals(1, channels.size)
+        assertEquals("UC_REAL_USER_SUB", channels[0].channelId)
+        assertEquals("Actual User Channel", channels[0].channelTitle)
+    }
+
+    @Test
     fun parseVideosFromJson_extractsVideoRenderer() {
         val root = JSONObject("""
             {

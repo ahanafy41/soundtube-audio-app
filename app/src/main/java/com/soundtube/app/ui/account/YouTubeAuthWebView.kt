@@ -171,16 +171,47 @@ fun YouTubeAuthWebView(
 
                                 private fun checkAndExtractCookies(currentUrl: String?) {
                                     val targetUrl = currentUrl ?: "https://www.youtube.com"
-                                    val cookies = cookieManager.getCookie("https://www.youtube.com")
-                                        ?: cookieManager.getCookie(targetUrl)
+                                    val ytCookies = cookieManager.getCookie("https://www.youtube.com").orEmpty()
+                                    val googleCookies = cookieManager.getCookie("https://accounts.google.com").orEmpty()
+                                    val targetCookies = cookieManager.getCookie(targetUrl).orEmpty()
 
-                                    if (!cookies.isNullOrBlank()) {
-                                        val hasSapisid = cookies.contains("SAPISID=") ||
-                                                cookies.contains("__Secure-3PAPISID=")
-                                        val hasLoginInfo = cookies.contains("LOGIN_INFO=")
+                                    // Deduplicate and combine all session cookies
+                                    val cookieMap = mutableMapOf<String, String>()
+                                    fun addCookies(raw: String) {
+                                        if (raw.isBlank()) return
+                                        raw.split(";").forEach { part ->
+                                            val trimmed = part.trim()
+                                            val eqIdx = trimmed.indexOf('=')
+                                            if (eqIdx > 0) {
+                                                val key = trimmed.substring(0, eqIdx).trim()
+                                                val value = trimmed.substring(eqIdx + 1).trim()
+                                                if (key.isNotEmpty() && !cookieMap.containsKey(key)) {
+                                                    cookieMap[key] = value
+                                                }
+                                            }
+                                        }
+                                    }
+                                    addCookies(ytCookies)
+                                    addCookies(googleCookies)
+                                    addCookies(targetCookies)
 
-                                        if (hasSapisid && (hasLoginInfo || targetUrl.contains("youtube.com"))) {
-                                            authStorage.saveCookies(cookies)
+                                    val combinedCookies = cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
+
+                                    if (combinedCookies.isNotBlank()) {
+                                        val hasSapisid = combinedCookies.contains("SAPISID=") ||
+                                                combinedCookies.contains("__Secure-3PAPISID=") ||
+                                                combinedCookies.contains("__Secure-1PAPISID=")
+                                        val hasLoginInfo = combinedCookies.contains("LOGIN_INFO=")
+                                        val hasSid = combinedCookies.contains("SID=") ||
+                                                combinedCookies.contains("__Secure-3PSID=") ||
+                                                combinedCookies.contains("__Secure-1PSID=")
+
+                                        // Complete login requires SAPISID AND (LOGIN_INFO or SID),
+                                        // verified on youtube.com domain after redirect from Google accounts
+                                        val isYouTubeDomain = targetUrl.contains("youtube.com") && !targetUrl.contains("accounts.google.com")
+                                        if (hasSapisid && (hasLoginInfo || hasSid) && isYouTubeDomain) {
+                                            cookieManager.flush()
+                                            authStorage.saveCookies(combinedCookies)
                                             statusMessage = "تم تسجيل الدخول بنجاح! جارٍ حفظ الجلسة والمزامنة."
                                             onAuthSuccess()
                                         }

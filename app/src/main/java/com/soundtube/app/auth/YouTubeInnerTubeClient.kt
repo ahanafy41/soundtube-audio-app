@@ -87,7 +87,8 @@ class YouTubeInnerTubeClient(
             do {
                 pageCount++
                 val payloadJson = buildRequestBody(continuationToken)
-                val authHeader = SapisidHashGenerator.generate(sapisid)
+                val authHeader = SapisidHashGenerator.generateFromCookieHeader(cookieHeader)
+                    ?: SapisidHashGenerator.generate(sapisid)
 
                 val endpointUrl = "$BROWSE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false"
                 val request = Request.Builder()
@@ -158,12 +159,12 @@ class YouTubeInnerTubeClient(
         subscriptions: MutableList<Subscription>
     ) {
         val targets = listOf(
-            "$GUIDE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false",
             "$BROWSE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false"
         )
+        val auth = SapisidHashGenerator.generateFromCookieHeader(cookieHeader)
+            ?: SapisidHashGenerator.generate(sapisid)
         for (targetUrl in targets) {
             val body = buildRequestBody(null, "FEsubscriptions").toString().toRequestBody(JSON_MEDIA_TYPE)
-            val auth = SapisidHashGenerator.generate(sapisid)
             val req = Request.Builder().url(targetUrl).post(body)
                 .header("Content-Type", "application/json").header("User-Agent", CHROME_MOBILE_UA)
                 .header("Cookie", cookieHeader).header("Authorization", auth)
@@ -213,6 +214,19 @@ class YouTubeInnerTubeClient(
         const val CHROME_MOBILE_UA =
             "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * YouTube default system/topic channels that should never be treated as user subscriptions.
+         */
+        val SYSTEM_CHANNEL_IDS = setOf(
+            "UC-9-kyTW8ZkZNDHQJ6FgpwQ", // YouTube Music
+            "UCOpNcN46UbXVtpKMrmU4Abg", // YouTube Gaming
+            "UC4R8DWoMoI7CAwX8_LjQHig", // YouTube Live
+            "UCEgdi0XIXXZ-qJOFPf4JSKw", // YouTube Sports
+            "UCYfdidRxbB8Qhf0Nx7ioOYw", // YouTube News
+            "UCokL_m68cIq42k5eAIdVnMQ", // Movies & TV
+            "UCF0pVplsI8R5kcAqgtoRqoA"  // Popular on YouTube
+        )
 
         fun defaultHttpClient(): OkHttpClient {
             return OkHttpClient.Builder()
@@ -266,7 +280,7 @@ class YouTubeInnerTubeClient(
                 }
             }.ifBlank { renderer.optString("canonicalBaseUrl").removePrefix("/") }
 
-            if (channelId.isBlank() || channelId.startsWith("FE") || channelId.startsWith("VL")) return null
+            if (channelId.isBlank() || channelId.startsWith("FE") || channelId.startsWith("VL") || SYSTEM_CHANNEL_IDS.contains(channelId)) return null
 
             val title = extractText(renderer.opt("title")) ?: extractText(renderer.opt("formattedTitle")) ?: "قناة غير معروفة"
             val avatarUrl = extractThumbnailUrl(renderer.optJSONObject("thumbnail")) ?: extractThumbnailUrl(renderer.optJSONObject("thumbnails"))

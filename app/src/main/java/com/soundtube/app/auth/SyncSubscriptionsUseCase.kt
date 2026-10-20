@@ -42,8 +42,12 @@ class SyncSubscriptionsUseCase(
             onSuccess = { subscriptions ->
                 if (subscriptions.isNotEmpty()) {
                     subscriptionDao.insertAll(subscriptions)
+                    Result.success(subscriptions.size)
+                } else {
+                    Result.failure(
+                        IllegalStateException("لم يتم العثور على أي قنوات مشتركة في حسابك، أو أن صلاحية جلسة تسجيل الدخول بحاجة للتجديد.")
+                    )
                 }
-                Result.success(subscriptions.size)
             },
             onFailure = { error ->
                 Result.failure(error)
