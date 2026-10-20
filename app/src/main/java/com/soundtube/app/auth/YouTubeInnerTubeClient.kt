@@ -12,6 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.regex.Pattern
 
 /**
  * YouTube InnerTube API client for fetching user subscriptions via FEchannels browse endpoint.
@@ -80,6 +81,14 @@ class YouTubeInnerTubeClient(
             val seenChannelIds = mutableSetOf<String>()
             val seenTokens = mutableSetOf<String>()
 
+            // Engine 1: Direct HTML Feed Extraction using user session cookies (Fastest & Native)
+            fetchSubscriptionsFromHtmlFeed(cookieHeader, seenChannelIds, subscriptions)
+
+            if (subscriptions.isNotEmpty()) {
+                return@withContext Result.success(subscriptions)
+            }
+
+            // Engine 2: YouTube InnerTube API (FEchannels) with multi-token authorization
             var continuationToken: String? = null
             var pageCount = 0
             val maxPages = 50 // Guard against infinite pagination loops
@@ -107,41 +116,33 @@ class YouTubeInnerTubeClient(
                     .build()
 
                 val response = httpClient.newCall(request).execute()
-                if (!response.isSuccessful) {
-                    val code = response.code
-                    val errorBody = response.body?.string().orEmpty()
+                if (response.isSuccessful) {
+                    val responseText = response.body?.string().orEmpty()
                     response.close()
-                    return@withContext Result.failure(
-                        IOException("فشل الاتصال بـ YouTube InnerTube: كود $code - $errorBody")
-                    )
-                }
 
-                val responseText = response.body?.string() ?: ""
-                response.close()
+                    if (responseText.isNotBlank()) {
+                        val jsonResponse = JSONObject(responseText)
+                        val channels = parseChannelsFromJson(jsonResponse)
+                        for (channel in channels) {
+                            if (channel.channelId.isNotBlank() && seenChannelIds.add(channel.channelId)) {
+                                subscriptions.add(channel)
+                            }
+                        }
 
-                if (responseText.isBlank()) {
+                        continuationToken = extractContinuationToken(jsonResponse)
+                        if (continuationToken != null && !seenTokens.add(continuationToken)) {
+                            continuationToken = null
+                        }
+                    } else {
+                        break
+                    }
+                } else {
+                    response.close()
                     break
                 }
-
-                val jsonResponse = JSONObject(responseText)
-
-                // Parse channels from current page
-                val channels = parseChannelsFromJson(jsonResponse)
-                for (channel in channels) {
-                    if (channel.channelId.isNotBlank() && seenChannelIds.add(channel.channelId)) {
-                        subscriptions.add(channel)
-                    }
-                }
-
-                // Extract continuation token for the next page
-                continuationToken = extractContinuationToken(jsonResponse)
-                if (continuationToken != null && !seenTokens.add(continuationToken)) {
-                    // Cyclic token detected
-                    continuationToken = null
-                }
-
             } while (continuationToken != null && pageCount < maxPages)
 
+            // Engine 3: Fallback via FEsubscriptions browse endpoint
             if (subscriptions.isEmpty()) {
                 fetchFallbackSubscriptions(cookieHeader, sapisid, seenChannelIds, subscriptions)
             }
@@ -150,6 +151,38 @@ class YouTubeInnerTubeClient(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun fetchSubscriptionsFromHtmlFeed(
+        cookieHeader: String,
+        seenChannelIds: MutableSet<String>,
+        subscriptions: MutableList<Subscription>
+    ) {
+        try {
+            val req = Request.Builder()
+                .url("https://www.youtube.com/feed/channels")
+                .get()
+                .header("User-Agent", CHROME_MOBILE_UA)
+                .header("Cookie", cookieHeader)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "ar,en-US;q=0.9,en;q=0.8")
+                .build()
+
+            httpClient.newCall(req).execute().use { resp ->
+                val html = resp.body?.string().orEmpty()
+                if (resp.isSuccessful && html.isNotBlank()) {
+                    val initialData = extractYtInitialDataFromHtml(html)
+                    if (initialData != null) {
+                        val channels = parseChannelsFromJson(initialData)
+                        for (ch in channels) {
+                            if (ch.channelId.isNotBlank() && seenChannelIds.add(ch.channelId)) {
+                                subscriptions.add(ch)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     private fun fetchFallbackSubscriptions(
@@ -210,7 +243,7 @@ class YouTubeInnerTubeClient(
         const val INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
         const val BROWSE_ENDPOINT = "https://www.youtube.com/youtubei/v1/browse"
         const val GUIDE_ENDPOINT = "https://www.youtube.com/youtubei/v1/guide"
-        const val CLIENT_VERSION = "2.20240901.01.00"
+        const val CLIENT_VERSION = "2.20261020.00.00"
         const val CHROME_MOBILE_UA =
             "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
@@ -440,6 +473,68 @@ class YouTubeInnerTubeClient(
                 3 -> (parts[0].toLongOrNull() ?: 0L) * 3600 + (parts[1].toLongOrNull() ?: 0L) * 60 + (parts[2].toLongOrNull() ?: 0L)
                 else -> 0L
             }
+        }
+
+        /**
+         * Robustly extracts embedded ytInitialData JSON from YouTube HTML SSR page.
+         */
+        fun extractYtInitialDataFromHtml(html: String): JSONObject? {
+            val pattern = Pattern.compile("ytInitialData\\s*=\\s*(['\"{])")
+            val matcher = pattern.matcher(html)
+            if (!matcher.find()) return null
+
+            val delimiter = matcher.group(1) ?: return null
+            val startIdx = matcher.end() - 1
+
+            return try {
+                if (delimiter == "{") {
+                    var depth = 0
+                    var endIdx = -1
+                    for (i in startIdx until html.length) {
+                        val c = html[i]
+                        if (c == '{') depth++
+                        else if (c == '}') {
+                            depth--
+                            if (depth == 0) {
+                                endIdx = i + 1
+                                break
+                            }
+                        }
+                    }
+                    if (endIdx != -1) {
+                        JSONObject(html.substring(startIdx, endIdx))
+                    } else null
+                } else {
+                    val quoteChar = delimiter[0]
+                    val endIdx = html.indexOf("$quoteChar;", startIdx + 1)
+                    if (endIdx != -1) {
+                        val rawStr = html.substring(startIdx + 1, endIdx)
+                        val unescaped = unescapeHex(rawStr)
+                        JSONObject(unescaped)
+                    } else null
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        private fun unescapeHex(input: String): String {
+            val sb = StringBuilder(input.length)
+            var i = 0
+            while (i < input.length) {
+                if (input[i] == '\\' && i + 3 < input.length && input[i + 1] == 'x') {
+                    try {
+                        val hex = input.substring(i + 2, i + 4)
+                        val code = hex.toInt(16)
+                        sb.append(code.toChar())
+                        i += 4
+                        continue
+                    } catch (_: Exception) {}
+                }
+                sb.append(input[i])
+                i++
+            }
+            return sb.toString()
         }
     }
 }

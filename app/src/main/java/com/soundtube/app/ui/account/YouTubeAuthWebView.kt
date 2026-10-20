@@ -164,13 +164,27 @@ fun YouTubeAuthWebView(
                                     view: WebView?,
                                     request: WebResourceRequest?
                                 ): Boolean {
-                                    val currentUrl = request?.url?.toString().orEmpty()
-                                    checkAndExtractCookies(currentUrl)
+                                    // Allow all redirects and page navigations naturally
                                     return false
                                 }
 
                                 private fun checkAndExtractCookies(currentUrl: String?) {
                                     val targetUrl = currentUrl ?: "https://www.youtube.com"
+
+                                    // Guard against extracting during intermediate login handshakes
+                                    if (targetUrl.contains("/signin") ||
+                                        targetUrl.contains("ServiceLogin") ||
+                                        targetUrl.contains("accounts.google.com") ||
+                                        targetUrl.contains("CheckCookie")
+                                    ) {
+                                        return
+                                    }
+
+                                    val isYouTubeDestination = targetUrl.contains("youtube.com") || targetUrl.contains("youtu.be")
+                                    if (!isYouTubeDestination) {
+                                        return
+                                    }
+
                                     val ytCookies = cookieManager.getCookie("https://www.youtube.com").orEmpty()
                                     val googleCookies = cookieManager.getCookie("https://accounts.google.com").orEmpty()
                                     val targetCookies = cookieManager.getCookie(targetUrl).orEmpty()
@@ -206,13 +220,11 @@ fun YouTubeAuthWebView(
                                                 combinedCookies.contains("__Secure-3PSID=") ||
                                                 combinedCookies.contains("__Secure-1PSID=")
 
-                                        // Complete login requires SAPISID AND (LOGIN_INFO or SID),
-                                        // verified on youtube.com domain after redirect from Google accounts
-                                        val isYouTubeDomain = targetUrl.contains("youtube.com") && !targetUrl.contains("accounts.google.com")
-                                        if (hasSapisid && (hasLoginInfo || hasSid) && isYouTubeDomain) {
+                                        // Complete login requires SAPISID AND (LOGIN_INFO or SID)
+                                        if (hasSapisid && (hasLoginInfo || hasSid)) {
                                             cookieManager.flush()
                                             authStorage.saveCookies(combinedCookies)
-                                            statusMessage = "تم تسجيل الدخول بنجاح! جارٍ حفظ الجلسة والمزامنة."
+                                            statusMessage = "تم تسجيل الدخول بنجاح! جارٍ حفظ الجلسة ومزامنة الاشتراكات."
                                             onAuthSuccess()
                                         }
                                     }
@@ -229,4 +241,4 @@ fun YouTubeAuthWebView(
 }
 
 private const val SIGN_IN_URL =
-    "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue"
+    "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252Ffeed%252Fchannels"

@@ -308,6 +308,32 @@ class YouTubeInnerTubeClientTest {
     }
 
     @Test
+    fun extractYtInitialDataFromHtml_extractsJsonObject() {
+        val html = """
+            <html><body>
+            <script>var ytInitialData = {"contents":{"item":"test_value"}};</script>
+            </body></html>
+        """.trimIndent()
+
+        val json = YouTubeInnerTubeClient.extractYtInitialDataFromHtml(html)
+        assertNotNull(json)
+        assertEquals("test_value", json!!.optJSONObject("contents")?.optString("item"))
+    }
+
+    @Test
+    fun extractYtInitialDataFromHtml_extractsHexEscapedString() {
+        val html = """
+            <html><body>
+            <script>var ytInitialData = '\x7b\x22contents\x22:\x7b\x22item\x22:\x22escaped_value\x22\x7d\x7d';</script>
+            </body></html>
+        """.trimIndent()
+
+        val json = YouTubeInnerTubeClient.extractYtInitialDataFromHtml(html)
+        assertNotNull(json)
+        assertEquals("escaped_value", json!!.optJSONObject("contents")?.optString("item"))
+    }
+
+    @Test
     fun parseVideosFromJson_extractsVideoRenderer() {
         val root = JSONObject("""
             {

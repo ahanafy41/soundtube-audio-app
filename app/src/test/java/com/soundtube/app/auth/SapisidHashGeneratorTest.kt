@@ -14,7 +14,7 @@ class SapisidHashGeneratorTest {
         val timestamp = 1700000000L
         val origin = "https://www.youtube.com"
 
-        val expected = "SAPISIDHASH 1700000000_95ea8d4021ed9169f869d7ff0ff0f6f25eea1c4a"
+        val expected = "SAPISIDHASH 1700000000_95ea8d4021ed9169f869d7ff0ff0f6f25eea1c4a_u"
         val actual = SapisidHashGenerator.generate(
             sapisid = sapisid,
             origin = origin,
@@ -30,7 +30,7 @@ class SapisidHashGeneratorTest {
         val timestamp = 1690000000L
         val origin = "https://www.youtube.com"
 
-        val expected = "SAPISIDHASH 1690000000_325d586362bf321ac733123c1349f1727a88909c"
+        val expected = "SAPISIDHASH 1690000000_325d586362bf321ac733123c1349f1727a88909c_u"
         val actual = SapisidHashGenerator.generate(
             sapisid = sapisid,
             origin = origin,
@@ -51,7 +51,7 @@ class SapisidHashGeneratorTest {
         )
 
         assertNotNull(result)
-        assertEquals("SAPISIDHASH 1690000000_325d586362bf321ac733123c1349f1727a88909c", result)
+        assertEquals("SAPISIDHASH 1690000000_325d586362bf321ac733123c1349f1727a88909c_u", result)
     }
 
     @Test
@@ -65,8 +65,7 @@ class SapisidHashGeneratorTest {
         )
 
         assertNotNull(result)
-        assertTrue(result!!.contains("SAPISIDHASH 1690000000_325d586362bf321ac733123c1349f1727a88909c"))
-        assertTrue(result.contains("SAPISID3PHASH 1690000000_325d586362bf321ac733123c1349f1727a88909c"))
+        assertTrue(result!!.contains("SAPISIDHASH 1690000000_325d586362bf321ac733123c1349f1727a88909c_u"))
     }
 
     @Test
@@ -87,9 +86,10 @@ class SapisidHashGeneratorTest {
         val result = SapisidHashGenerator.generate(sapisid)
         assertTrue(result.startsWith("SAPISIDHASH "))
         val parts = result.removePrefix("SAPISIDHASH ").split("_")
-        assertEquals(2, parts.size)
+        assertEquals(3, parts.size)
         val ts = parts[0].toLong()
         assertTrue(ts > 1700000000L)
         assertEquals(40, parts[1].length)
+        assertEquals("u", parts[2])
     }
 }

@@ -38,7 +38,7 @@ object SapisidHashGenerator {
     ): String {
         require(sapisid.isNotBlank()) { "SAPISID cookie value cannot be blank" }
         val sha1Hex = computeSha1("$timestampSeconds $sapisid $origin")
-        return "SAPISIDHASH ${timestampSeconds}_$sha1Hex"
+        return "SAPISIDHASH ${timestampSeconds}_${sha1Hex}_u"
     }
 
     /**
@@ -62,23 +62,23 @@ object SapisidHashGenerator {
 
         val tokens = mutableListOf<String>()
 
-        // 1. Primary SAPISID token
+        // 1. Primary standard SAPISID token
         val primaryKey = sapisid ?: sapisid3p ?: sapisid1p
         if (primaryKey != null) {
             val hash = computeSha1("$timestampSeconds $primaryKey $origin")
-            tokens.add("SAPISIDHASH ${timestampSeconds}_$hash")
+            tokens.add("SAPISIDHASH ${timestampSeconds}_${hash}_u")
         }
 
-        // 2. Partitioned 3P token if available
-        if (sapisid3p != null) {
-            val hash3p = computeSha1("$timestampSeconds $sapisid3p $origin")
-            tokens.add("SAPISID3PHASH ${timestampSeconds}_$hash3p")
-        }
-
-        // 3. First-party 1P token if available
-        if (sapisid1p != null) {
+        // 2. Partitioned 1P token
+        if (sapisid1p != null && (sapisid != null || sapisid1p != primaryKey)) {
             val hash1p = computeSha1("$timestampSeconds $sapisid1p $origin")
-            tokens.add("SAPISID1PHASH ${timestampSeconds}_$hash1p")
+            tokens.add("SAPISID1PHASH ${timestampSeconds}_${hash1p}_u")
+        }
+
+        // 3. Partitioned 3P token
+        if (sapisid3p != null && (sapisid != null || sapisid3p != primaryKey)) {
+            val hash3p = computeSha1("$timestampSeconds $sapisid3p $origin")
+            tokens.add("SAPISID3PHASH ${timestampSeconds}_${hash3p}_u")
         }
 
         return tokens.joinToString(" ")
