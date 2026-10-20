@@ -100,20 +100,27 @@ class YouTubeInnerTubeClient(
                     ?: SapisidHashGenerator.generate(sapisid)
 
                 val endpointUrl = "$BROWSE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false"
-                val request = Request.Builder()
+                val requestBuilder = Request.Builder()
                     .url(endpointUrl)
                     .post(payloadJson.toString().toRequestBody(JSON_MEDIA_TYPE))
                     .header("Content-Type", "application/json")
-                    .header("User-Agent", CHROME_MOBILE_UA)
+                    .header("User-Agent", CHROME_DESKTOP_UA)
                     .header("Cookie", cookieHeader)
                     .header("Authorization", authHeader)
                     .header("Origin", "https://www.youtube.com")
                     .header("Referer", "https://www.youtube.com/feed/channels")
                     .header("X-Origin", "https://www.youtube.com")
-                    .header("X-Goog-AuthUser", "0")
                     .header("X-Youtube-Client-Name", "1")
                     .header("X-Youtube-Client-Version", CLIENT_VERSION)
-                    .build()
+
+                val pageId = EncryptedAuthStorage.extractCookieValue(cookieHeader, "PAGEID")
+                if (!pageId.isNullOrBlank()) {
+                    requestBuilder.header("X-Goog-PageId", pageId)
+                } else {
+                    requestBuilder.header("X-Goog-AuthUser", "0")
+                }
+
+                val request = requestBuilder.build()
 
                 val response = httpClient.newCall(request).execute()
                 if (response.isSuccessful) {
@@ -162,7 +169,7 @@ class YouTubeInnerTubeClient(
             val req = Request.Builder()
                 .url("https://www.youtube.com/feed/channels")
                 .get()
-                .header("User-Agent", CHROME_MOBILE_UA)
+                .header("User-Agent", CHROME_DESKTOP_UA)
                 .header("Cookie", cookieHeader)
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
                 .header("Accept-Language", "ar,en-US;q=0.9,en;q=0.8")
@@ -191,32 +198,78 @@ class YouTubeInnerTubeClient(
         seenChannelIds: MutableSet<String>,
         subscriptions: MutableList<Subscription>
     ) {
-        val targets = listOf(
-            "$BROWSE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false"
-        )
+        val pageId = EncryptedAuthStorage.extractCookieValue(cookieHeader, "PAGEID")
         val auth = SapisidHashGenerator.generateFromCookieHeader(cookieHeader)
             ?: SapisidHashGenerator.generate(sapisid)
-        for (targetUrl in targets) {
-            val body = buildRequestBody(null, "FEsubscriptions").toString().toRequestBody(JSON_MEDIA_TYPE)
-            val req = Request.Builder().url(targetUrl).post(body)
-                .header("Content-Type", "application/json").header("User-Agent", CHROME_MOBILE_UA)
-                .header("Cookie", cookieHeader).header("Authorization", auth)
-                .header("Origin", "https://www.youtube.com").header("Referer", "https://www.youtube.com/feed/channels")
-                .header("X-Origin", "https://www.youtube.com").header("X-Goog-AuthUser", "0")
-                .header("X-Youtube-Client-Name", "1").header("X-Youtube-Client-Version", CLIENT_VERSION)
-                .build()
-            try {
-                httpClient.newCall(req).execute().use { resp ->
-                    val text = resp.body?.string().orEmpty()
-                    if (resp.isSuccessful && text.isNotBlank()) {
-                        for (ch in parseChannelsFromJson(JSONObject(text))) {
-                            if (ch.channelId.isNotBlank() && seenChannelIds.add(ch.channelId)) subscriptions.add(ch)
+
+        // Target 1: Guide endpoint (contains guideSubscriptionsSectionRenderer with user subscriptions)
+        try {
+            val guideBody = buildRequestBody(null, "").toString().toRequestBody(JSON_MEDIA_TYPE)
+            val guideReqBuilder = Request.Builder()
+                .url("$GUIDE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false")
+                .post(guideBody)
+                .header("Content-Type", "application/json")
+                .header("User-Agent", CHROME_DESKTOP_UA)
+                .header("Cookie", cookieHeader)
+                .header("Authorization", auth)
+                .header("Origin", "https://www.youtube.com")
+                .header("X-Origin", "https://www.youtube.com")
+                .header("X-Youtube-Client-Name", "1")
+                .header("X-Youtube-Client-Version", CLIENT_VERSION)
+
+            if (!pageId.isNullOrBlank()) {
+                guideReqBuilder.header("X-Goog-PageId", pageId)
+            } else {
+                guideReqBuilder.header("X-Goog-AuthUser", "0")
+            }
+
+            httpClient.newCall(guideReqBuilder.build()).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                if (resp.isSuccessful && text.isNotBlank()) {
+                    for (ch in parseChannelsFromJson(JSONObject(text))) {
+                        if (ch.channelId.isNotBlank() && seenChannelIds.add(ch.channelId)) {
+                            subscriptions.add(ch)
                         }
                     }
                 }
-            } catch (_: Exception) {}
-            if (subscriptions.isNotEmpty()) break
-        }
+            }
+        } catch (_: Exception) {}
+
+        if (subscriptions.isNotEmpty()) return
+
+        // Target 2: Fallback via FEsubscriptions browse endpoint
+        try {
+            val subFeedBody = buildRequestBody(null, "FEsubscriptions").toString().toRequestBody(JSON_MEDIA_TYPE)
+            val reqBuilder = Request.Builder()
+                .url("$BROWSE_ENDPOINT?key=$INNERTUBE_API_KEY&prettyPrint=false")
+                .post(subFeedBody)
+                .header("Content-Type", "application/json")
+                .header("User-Agent", CHROME_DESKTOP_UA)
+                .header("Cookie", cookieHeader)
+                .header("Authorization", auth)
+                .header("Origin", "https://www.youtube.com")
+                .header("Referer", "https://www.youtube.com/feed/channels")
+                .header("X-Origin", "https://www.youtube.com")
+                .header("X-Youtube-Client-Name", "1")
+                .header("X-Youtube-Client-Version", CLIENT_VERSION)
+
+            if (!pageId.isNullOrBlank()) {
+                reqBuilder.header("X-Goog-PageId", pageId)
+            } else {
+                reqBuilder.header("X-Goog-AuthUser", "0")
+            }
+
+            httpClient.newCall(reqBuilder.build()).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                if (resp.isSuccessful && text.isNotBlank()) {
+                    for (ch in parseChannelsFromJson(JSONObject(text))) {
+                        if (ch.channelId.isNotBlank() && seenChannelIds.add(ch.channelId)) {
+                            subscriptions.add(ch)
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     private fun buildRequestBody(continuationToken: String?, browseId: String = "FEchannels"): JSONObject {
@@ -243,7 +296,9 @@ class YouTubeInnerTubeClient(
         const val INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
         const val BROWSE_ENDPOINT = "https://www.youtube.com/youtubei/v1/browse"
         const val GUIDE_ENDPOINT = "https://www.youtube.com/youtubei/v1/guide"
-        const val CLIENT_VERSION = "2.20261020.00.00"
+        const val CLIENT_VERSION = "2.20261019.01.00"
+        const val CHROME_DESKTOP_UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         const val CHROME_MOBILE_UA =
             "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
@@ -286,6 +341,7 @@ class YouTubeInnerTubeClient(
                         ?: value.optJSONObject("gridChannelRenderer")
                         ?: value.optJSONObject("compactChannelRenderer")
                         ?: value.optJSONObject("guideEntryRenderer")
+                        ?: value.optJSONObject("channelListItemRenderer")
 
                     if (renderer != null) {
                         parseChannelRenderer(renderer)?.let { results.add(it) }
@@ -479,7 +535,7 @@ class YouTubeInnerTubeClient(
          * Robustly extracts embedded ytInitialData JSON from YouTube HTML SSR page.
          */
         fun extractYtInitialDataFromHtml(html: String): JSONObject? {
-            val pattern = Pattern.compile("ytInitialData\\s*=\\s*(['\"{])")
+            val pattern = Pattern.compile("(?:window\\[\"ytInitialData\"\\]|var ytInitialData|ytInitialData)\\s*=\\s*(['\"{])")
             val matcher = pattern.matcher(html)
             if (!matcher.find()) return null
 

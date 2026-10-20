@@ -308,6 +308,29 @@ class YouTubeInnerTubeClientTest {
     }
 
     @Test
+    fun parseChannelsFromJson_extractsChannelListItemRenderer() {
+        val root = JSONObject("""
+            {
+                "channelListItemRenderer": {
+                    "channelId": "UC_CHANNEL_LIST_ITEM_123",
+                    "title": { "simpleText": "Channel List Item Title" },
+                    "thumbnail": {
+                        "thumbnails": [
+                            { "url": "https://yt3.ggpht.com/channel_list_item.jpg" }
+                        ]
+                    }
+                }
+            }
+        """.trimIndent())
+
+        val channels = YouTubeInnerTubeClient.parseChannelsFromJson(root)
+
+        assertEquals(1, channels.size)
+        assertEquals("UC_CHANNEL_LIST_ITEM_123", channels[0].channelId)
+        assertEquals("Channel List Item Title", channels[0].channelTitle)
+    }
+
+    @Test
     fun extractYtInitialDataFromHtml_extractsJsonObject() {
         val html = """
             <html><body>

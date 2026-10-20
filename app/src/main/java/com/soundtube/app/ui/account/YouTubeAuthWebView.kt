@@ -54,6 +54,7 @@ fun YouTubeAuthWebView(
     var isLoading by remember { mutableStateOf(true) }
     var progress by remember { mutableFloatStateOf(0f) }
     var statusMessage by remember { mutableStateOf("جارٍ فتح صفحة تسجيل الدخول إلى Google") }
+    var hasTriggeredSuccess by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier
@@ -180,12 +181,16 @@ fun YouTubeAuthWebView(
                                         return
                                     }
 
+                                    if (hasTriggeredSuccess) return
+
                                     val isYouTubeDestination = targetUrl.contains("youtube.com") || targetUrl.contains("youtu.be")
                                     if (!isYouTubeDestination) {
                                         return
                                     }
 
                                     val ytCookies = cookieManager.getCookie("https://www.youtube.com").orEmpty()
+                                    val mYtCookies = cookieManager.getCookie("https://m.youtube.com").orEmpty()
+                                    val dotYtCookies = cookieManager.getCookie(".youtube.com").orEmpty()
                                     val googleCookies = cookieManager.getCookie("https://accounts.google.com").orEmpty()
                                     val targetCookies = cookieManager.getCookie(targetUrl).orEmpty()
 
@@ -206,6 +211,8 @@ fun YouTubeAuthWebView(
                                         }
                                     }
                                     addCookies(ytCookies)
+                                    addCookies(mYtCookies)
+                                    addCookies(dotYtCookies)
                                     addCookies(googleCookies)
                                     addCookies(targetCookies)
 
@@ -220,8 +227,11 @@ fun YouTubeAuthWebView(
                                                 combinedCookies.contains("__Secure-3PSID=") ||
                                                 combinedCookies.contains("__Secure-1PSID=")
 
-                                        // Complete login requires SAPISID AND (LOGIN_INFO or SID)
-                                        if (hasSapisid && (hasLoginInfo || hasSid)) {
+                                        // Complete login requires valid SAPISID and YouTube session verification
+                                        val isReady = hasSapisid && (hasLoginInfo || (hasSid && (targetUrl.contains("feed") || targetUrl.contains("channel") || targetUrl.contains("m.youtube.com"))))
+
+                                        if (isReady && !hasTriggeredSuccess) {
+                                            hasTriggeredSuccess = true
                                             cookieManager.flush()
                                             authStorage.saveCookies(combinedCookies)
                                             statusMessage = "تم تسجيل الدخول بنجاح! جارٍ حفظ الجلسة ومزامنة الاشتراكات."

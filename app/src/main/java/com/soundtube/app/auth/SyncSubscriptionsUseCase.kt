@@ -44,9 +44,13 @@ class SyncSubscriptionsUseCase(
                     subscriptionDao.insertAll(subscriptions)
                     Result.success(subscriptions.size)
                 } else {
-                    Result.failure(
-                        IllegalStateException("لم يتم العثور على أي قنوات مشتركة في حسابك، أو أن صلاحية جلسة تسجيل الدخول بحاجة للتجديد.")
-                    )
+                    val hasLoginInfo = authStorage.hasLoginInfo()
+                    val errorMessage = if (!hasLoginInfo) {
+                        "انتهت صلاحية جلسة تسجيل الدخول إلى YouTube (LOGIN_INFO غير متوفر). يرجى الضغط على تسجيل الخروج ثم تسجيل الدخول مرة أخرى."
+                    } else {
+                        "لم يتم العثور على أي قنوات مشتركة في حسابك الحالي. إذا كانت لديك قنوات على حساب آخر أو ملف CSV، يمكنك استيرادها من خيار Google Takeout بالأسفل."
+                    }
+                    Result.failure(IllegalStateException(errorMessage))
                 }
             },
             onFailure = { error ->

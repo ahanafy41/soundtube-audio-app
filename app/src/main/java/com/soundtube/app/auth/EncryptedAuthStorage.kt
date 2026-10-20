@@ -75,6 +75,22 @@ class EncryptedAuthStorage private constructor(context: Context) {
     }
 
     /**
+     * Checks if YouTube's core session cookie (LOGIN_INFO) exists.
+     */
+    fun hasLoginInfo(): Boolean {
+        val cookies = getCookies() ?: return false
+        return extractCookieValue(cookies, "LOGIN_INFO") != null
+    }
+
+    /**
+     * Extracts optional brand channel Page ID (PAGEID) if user has a brand channel.
+     */
+    fun getPageId(): String? {
+        val cookies = getCookies() ?: return null
+        return extractCookieValue(cookies, "PAGEID")
+    }
+
+    /**
      * Updates optional profile details like username or channel avatar.
      */
     fun saveUserProfile(name: String?, avatarUrl: String?) {

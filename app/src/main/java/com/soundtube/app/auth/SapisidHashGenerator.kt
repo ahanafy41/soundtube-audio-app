@@ -38,12 +38,12 @@ object SapisidHashGenerator {
     ): String {
         require(sapisid.isNotBlank()) { "SAPISID cookie value cannot be blank" }
         val sha1Hex = computeSha1("$timestampSeconds $sapisid $origin")
-        return "SAPISIDHASH ${timestampSeconds}_${sha1Hex}_u"
+        return "SAPISIDHASH ${timestampSeconds}_$sha1Hex"
     }
 
     /**
      * Helper to generate header directly from a full Cookie header string.
-     * Produces all compatible tokens (SAPISIDHASH, SAPISID3PHASH, SAPISID1PHASH)
+     * Produces all compatible tokens (SAPISIDHASH, SAPISID1PHASH, SAPISID3PHASH)
      * so that YouTube's InnerTube authentication succeeds across standard, partitioned,
      * and secure browser cookie scopes.
      */
@@ -53,8 +53,8 @@ object SapisidHashGenerator {
         timestampSeconds: Long = System.currentTimeMillis() / 1000
     ): String? {
         val sapisid = EncryptedAuthStorage.extractCookieValue(cookieHeader, "SAPISID")
-        val sapisid3p = EncryptedAuthStorage.extractCookieValue(cookieHeader, "__Secure-3PAPISID")
         val sapisid1p = EncryptedAuthStorage.extractCookieValue(cookieHeader, "__Secure-1PAPISID")
+        val sapisid3p = EncryptedAuthStorage.extractCookieValue(cookieHeader, "__Secure-3PAPISID")
 
         if (sapisid == null && sapisid3p == null && sapisid1p == null) {
             return null
@@ -62,23 +62,23 @@ object SapisidHashGenerator {
 
         val tokens = mutableListOf<String>()
 
-        // 1. Primary standard SAPISID token
+        // 1. Primary standard SAPISID token (falls back to __Secure-3PAPISID if SAPISID is missing)
         val primaryKey = sapisid ?: sapisid3p ?: sapisid1p
         if (primaryKey != null) {
             val hash = computeSha1("$timestampSeconds $primaryKey $origin")
-            tokens.add("SAPISIDHASH ${timestampSeconds}_${hash}_u")
+            tokens.add("SAPISIDHASH ${timestampSeconds}_$hash")
         }
 
         // 2. Partitioned 1P token
         if (sapisid1p != null && (sapisid != null || sapisid1p != primaryKey)) {
             val hash1p = computeSha1("$timestampSeconds $sapisid1p $origin")
-            tokens.add("SAPISID1PHASH ${timestampSeconds}_${hash1p}_u")
+            tokens.add("SAPISID1PHASH ${timestampSeconds}_$hash1p")
         }
 
         // 3. Partitioned 3P token
         if (sapisid3p != null && (sapisid != null || sapisid3p != primaryKey)) {
             val hash3p = computeSha1("$timestampSeconds $sapisid3p $origin")
-            tokens.add("SAPISID3PHASH ${timestampSeconds}_${hash3p}_u")
+            tokens.add("SAPISID3PHASH ${timestampSeconds}_$hash3p")
         }
 
         return tokens.joinToString(" ")
